@@ -191,19 +191,21 @@ export function PlanPanel({
               <li key={c.name}>
                 <button
                   onClick={() => onChannelChange(c.name)}
+                  aria-pressed={selected}
                   className={`w-full rounded-lg border p-3 text-left transition ${
                     selected ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 hover:border-zinc-300"
                   }`}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
+                  {/* Spans, not p/div: a button may only contain phrasing content. */}
+                  <span className="flex flex-wrap items-center gap-2">
                     <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${move.className}`}>
                       {move.label}
                     </span>
                     <span className="font-medium">{c.name}</span>
                     <span className="text-xs text-zinc-400">{PRESENCE[c.presence] ?? c.presence}</span>
-                  </div>
-                  <p className="mt-1.5 text-sm text-zinc-600">{c.rationale}</p>
-                  <p className="mt-1 text-xs text-zinc-500">Cadence: {c.cadence}</p>
+                  </span>
+                  <span className="mt-1.5 block text-sm text-zinc-600">{c.rationale}</span>
+                  <span className="mt-1 block text-xs text-zinc-500">Cadence: {c.cadence}</span>
                 </button>
               </li>
             );
@@ -215,31 +217,47 @@ export function PlanPanel({
       {/* -------- content types -------- */}
       <Section title="What to make first">
         <ul className="space-y-2">
-          {plan.contentTypes.map((ct, i) => (
-            <li key={ct.name}>
-              <button
-                onClick={() => onTopicIndexChange(i)}
-                className={`w-full rounded-lg border p-3 text-left transition ${
-                  topicIndex === i ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 hover:border-zinc-300"
-                }`}
-              >
-                <p className="font-medium">{ct.name}</p>
-                <p className="mt-1 text-xs text-zinc-500">{ct.why}</p>
-                {topicIndex === i ? (
-                  <textarea
-                    value={topic}
-                    onChange={(e) => onTopicChange(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    rows={3}
-                    className="mt-2 w-full resize-none rounded-md border border-zinc-300 bg-white p-2 text-sm outline-none focus:border-zinc-900"
-                    aria-label="Post brief"
-                  />
-                ) : (
-                  <p className="mt-2 text-sm text-zinc-600">{ct.topic}</p>
-                )}
-              </button>
-            </li>
-          ))}
+          {plan.contentTypes.map((ct, i) => {
+            const selected = topicIndex === i;
+            return (
+              <li key={ct.name}>
+                {/*
+                 * The card is a div, not a button. A textarea inside a button is
+                 * invalid nesting, and it misbehaves: space and Enter typed in
+                 * the brief would activate the button underneath it.
+                 */}
+                <div
+                  className={`rounded-lg border transition ${
+                    selected ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 hover:border-zinc-300"
+                  }`}
+                >
+                  <button
+                    onClick={() => onTopicIndexChange(i)}
+                    aria-pressed={selected}
+                    className="w-full p-3 text-left"
+                  >
+                    <span className="block font-medium">{ct.name}</span>
+                    <span className="mt-1 block text-xs text-zinc-500">{ct.why}</span>
+                    {selected ? null : (
+                      <span className="mt-2 block text-sm text-zinc-600">{ct.topic}</span>
+                    )}
+                  </button>
+
+                  {selected ? (
+                    <div className="px-3 pb-3">
+                      <textarea
+                        value={topic}
+                        onChange={(e) => onTopicChange(e.target.value)}
+                        rows={3}
+                        className="w-full resize-none rounded-md border border-zinc-300 bg-white p-2 text-sm outline-none focus:border-zinc-900"
+                        aria-label="Post brief"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </Section>
 

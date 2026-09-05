@@ -223,6 +223,33 @@ the "paste yours" fixture pitch beside it, which reads as nonsense next to a
 brand we clearly already have. There is a `brand` canvas mode now: the logo on
 their own surface colour with their palette.
 
+### "Redo the plan" looked broken because it was silent
+
+Reported as doing nothing. It was running the whole time - for sixty to ninety
+seconds - with no sign of it anywhere on screen.
+
+`planStatus` tested `plan ? "done"` before `planning ? "working"`, so a redo
+kept rendering the existing plan as finished. No `replanning` prop reached
+PlanStage either, so the button never changed and the constraint field closed
+itself the moment it was submitted. Every visible signal said nothing had
+happened.
+
+The old plan now stays on screen but dims, the field stays open, the button
+reads "Redoing…", and a line says the plan below is the old one. Same shape as
+the rebuild bar - a slow action must say it is running or it reads as a dead
+button.
+
+The constraint was also not binding. The prompt took it as background under a
+heading saying "what they want out of this", while the rules above it told the
+model to pick channels from the buyer's named places. It is now a CONSTRAINT
+block that explicitly outranks the model's judgement: name a channel and it
+appears at start-here or next even if the model disagrees, rule one out and it
+disappears, give a time budget and every cadence has to fit it.
+
+Verified on tartinebakery.com with "drop Reddit entirely and use Instagram as
+the main channel": Reddit vanished from the plan, Instagram became start-here at
+two posts a week, and the content briefs regenerated as reels.
+
 ### A cached row can be honestly incomplete
 
 Competitor research takes 25-60 seconds and the row is marked `ready` the moment

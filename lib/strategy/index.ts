@@ -95,7 +95,17 @@ they are already on screen above your plan.
 Be brief everywhere. Every field is read at a glance in a UI, not in a document. One
 sentence where one sentence will do, and no field restates another.
 
-Two rules that override everything above:
+If a CONSTRAINT block is present it outranks everything above, including the buyer's
+named places and your own judgement about what would work best.
+
+- If they name a channel, that channel is in your plan with move "start-here" or "next",
+  even if you would not have chosen it. Do not argue and do not quietly demote it to
+  "later". If it is a poor fit, say what it will cost them in its rationale and give it a
+  cadence that survives - that is useful; refusing the instruction is not.
+- If they rule a channel out, it does not appear at all, at any move.
+- If they give you a time budget, every cadence in the plan has to fit inside it.
+
+Two rules that override everything else:
 
 1. Respect the brand's voice. Their "avoid" list applies to the plan as much as to the
    copy. Do not recommend a channel or format that would require them to sound like
@@ -139,7 +149,7 @@ ${describeSignals(signals)}
 
 ${audience ? describeAudience(audience) : ""}
 
-${goal.trim() ? `WHAT THEY WANT OUT OF THIS\n${goal.trim()}\n` : ""}
+${goal.trim() ? `CONSTRAINT - this is binding, it outranks your own judgement\n${goal.trim()}\n` : ""}
 Write the audit and plan.`;
 }
 

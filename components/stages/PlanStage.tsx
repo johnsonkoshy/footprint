@@ -40,6 +40,7 @@ export function PlanStage({
   onRebuild,
   rebuilding,
   dirty,
+  replanning,
 }: {
   status: StageStatus;
   elapsed: number;
@@ -65,6 +66,8 @@ export function PlanStage({
   rebuilding: boolean;
   /** The selection no longer matches the plan on screen. */
   dirty: boolean;
+  /** A redo is in flight. The old plan stays on screen underneath it. */
+  replanning: boolean;
 }) {
   const [why, setWhy] = useState(false);
   const [changing, setChanging] = useState(false);
@@ -112,7 +115,7 @@ export function PlanStage({
       ) : null}
 
       {status === "done" && plan ? (
-        <div className="flex flex-col gap-4">
+        <div className={`flex flex-col gap-4 ${replanning ? "opacity-60" : ""}`}>
           {notes.length ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-200">
               {notes.join("; ")}
@@ -232,23 +235,41 @@ export function PlanStage({
             })}
           </ul>
 
-          {changing ? (
-            <div className="flex gap-2">
-              <input
-                value={goal}
-                onChange={(e) => onGoalChange(e.target.value)}
-                placeholder="We only have two hours a week"
-                className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
-              />
-              <button
-                onClick={() => {
-                  setChanging(false);
+          {changing || replanning ? (
+            <div className="flex flex-col gap-2">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
                   onReplan();
                 }}
-                className="shrink-0 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium"
+                className="flex gap-2"
               >
-                Redo the plan
-              </button>
+                <input
+                  value={goal}
+                  onChange={(e) => onGoalChange(e.target.value)}
+                  placeholder="Use Instagram instead. Or: we only have two hours a week"
+                  disabled={replanning}
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900 disabled:bg-zinc-50"
+                />
+                <button
+                  type="submit"
+                  disabled={replanning}
+                  className="shrink-0 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium disabled:opacity-40"
+                >
+                  {replanning ? "Redoing…" : "Redo the plan"}
+                </button>
+              </form>
+              {/*
+                The old plan stays on screen underneath while this runs, so
+                without a line here the click looks like it did nothing for the
+                sixty seconds the rewrite takes.
+              */}
+              {replanning ? (
+                <p className="text-sm text-zinc-500">
+                  <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 align-middle" aria-hidden />
+                  Rewriting the whole plan around that. About a minute — the plan below is the old one.
+                </p>
+              ) : null}
             </div>
           ) : null}
 

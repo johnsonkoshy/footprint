@@ -740,6 +740,7 @@ export function Viewer() {
               onRebuild={runRebuild}
               rebuilding={rebuilding}
               dirty={selectionDirty}
+              replanning={planning && Boolean(plan)}
             />
           ) : null}
 

@@ -41,6 +41,8 @@ export function Split({
         }}
       >
         {theme.logoSrc ? (
+          // Satori renders this, not the browser - next/image does not apply.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={theme.logoSrc}
             height={38}

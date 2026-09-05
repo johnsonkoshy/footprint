@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# The example is the one env file that must ship; .env* above would hide it.
+!.env.local.example

@@ -97,7 +97,10 @@ lib/strategy/index.ts           the strategist prompt + the same safety loop
 lib/strategy/rebuild.ts         rewrite the plan for the founder's own picks
 lib/market/index.ts             audience (fast) + competitors (web search)
 components/stages/              Stage shell + Brand, Footprint, Plan, Post cards
-components/Canvas.tsx           the sticky right pane: fixtures -> screenshot -> post
+components/Canvas.tsx           the right pane: fixtures -> screenshot -> post
+components/UrlStart.tsx         the landing page's front door
+app/page.tsx                    landing
+app/build/page.tsx              the wizard
 lib/generate/index.ts           voice-enforcing prompt + the same safety loop
 lib/render/contrast.ts          WCAG luminance, ratio, ensureContrast
 lib/render/theme.ts             all colour maths, so templates stay literal-free
@@ -174,6 +177,53 @@ generation. About **5.5 cents per brand**, end to end. Override either with
 back rather than 404-ing every request.
 
 Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
+
+---
+
+## Landing page and the wizard
+
+`/` is now a landing page and the app moved to `/build`. The landing is not a
+gate in front of the product: its URL field is the app's front door, and
+submitting hands the address straight to `/build?url=...`, which starts the run
+on arrival. Pasting once is the whole interaction.
+
+The four stages became a wizard on a single screen. The old scroll made the
+process legible but meant the artifact and the decision were rarely visible at
+the same time, and a long Market step pushed everything else off-screen. Now:
+
+- a fixed header carrying identity, the stepper, and a way out
+- one step at a time, in a column that scrolls internally
+- the canvas beside it, always visible, never moving
+- a fixed footer with Back, what is still pending, and the one action worth taking
+
+The page itself never scrolls (verified: `scrollHeight === innerHeight`). The
+trick is `min-h-0` on the flex and grid children - without it the column refuses
+to scroll and stretches the document instead.
+
+Five cards became four steps: Footprint folds in above Market, since "what
+marketing you have" and "who it is for" are both answering where you stand today.
+
+**The view follows the work forward until the user navigates, then stays put.**
+`step` is derived - `pinnedStep ?? furthest` - rather than synced in an effect,
+so there is no second render and no frame where the two disagree. Pressing
+"write this post" pins step 4; starting a new company unpins.
+
+### Three bugs the rewrite exposed
+
+- **The dirty bar was always on.** Two definitions of "we recommend this"
+  disagreed: the selection was seeded from `start-here | next`, while the
+  dirty check compared against `!== skip`. Any plan containing a "later"
+  channel therefore read as edited the instant it arrived. Both now use one
+  `isRecommended` predicate. The chips had the same flaw in words - "later" and
+  "skip" both rendered as "we'd skip", which is different advice.
+- **A refresh lost the founder's picks**, and then the save effect wrote the
+  empty selection back over the good one - a read bug becoming a write bug on
+  the next render. The picks are persisted now, and fall back to reseeding from
+  the plan when an older session lacks them.
+- **A refresh re-ran the whole extraction.** The restore effect and the
+  auto-start effect run in the same commit, so the second one still saw
+  `kit === null` and paid for the site again. It reads sessionStorage directly
+  instead of the state it cannot yet see.
 
 ---
 

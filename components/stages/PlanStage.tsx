@@ -132,7 +132,8 @@ export function PlanStage({
             <ul className="flex flex-wrap gap-1.5">
               {plan.channels.map((c) => {
                 const on = pickedChannels.includes(c.name);
-                const advised = c.move === "start-here" || c.move === "next";
+                // "later" and "skip" are different advice and used to read the same.
+                const aside = c.move === "skip" ? "we'd skip" : c.move === "later" ? "later" : null;
                 return (
                   <li key={c.name}>
                     <button
@@ -146,7 +147,9 @@ export function PlanStage({
                       }`}
                     >
                       {c.name}
-                      {advised ? null : <span className={on ? "text-zinc-400" : "text-zinc-300"}> ·  we&apos;d skip</span>}
+                      {aside ? (
+                        <span className={on ? "text-zinc-400" : "text-zinc-300"}> · {aside}</span>
+                      ) : null}
                     </button>
                   </li>
                 );

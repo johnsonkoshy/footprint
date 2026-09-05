@@ -27,11 +27,11 @@ export function Canvas({
   onTemplate: (t: TemplateId) => void;
 }) {
   return (
-    <div className="flex flex-col gap-3">
-      <div className="relative flex min-h-[520px] items-center justify-center overflow-hidden rounded-xl bg-zinc-100 p-5 ring-1 ring-inset ring-zinc-200/70">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 p-5 ring-1 ring-inset ring-zinc-200/70">
         {mode === "empty" ? (
-          <div className="flex w-full flex-col items-center gap-4">
-            <div className="grid w-full max-w-[560px] grid-cols-2 gap-3">
+          <div className="flex max-h-full w-full flex-col items-center gap-4">
+            <div className="grid w-full max-w-[420px] grid-cols-2 gap-3">
               {/* Fixture renders: no API calls, so this is instant and free. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/api/render?fixture=stripe&template=statement" alt="Example post in Stripe's brand" className="w-full rounded-md shadow-md ring-1 ring-black/5" />
@@ -45,8 +45,8 @@ export function Canvas({
         ) : null}
 
         {mode === "screenshot" && screenshot ? (
-          <figure className="flex w-full flex-col items-center gap-3">
-            <div className="w-full max-w-[560px] overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black/10">
+          <figure className="flex max-h-full w-full flex-col items-center gap-3">
+            <div className="w-full max-w-[520px] overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black/10">
               <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-2">
                 <span className="h-2 w-2 rounded-full bg-zinc-300" />
                 <span className="h-2 w-2 rounded-full bg-zinc-300" />
@@ -54,7 +54,7 @@ export function Canvas({
                 <span className="ml-2 truncate text-xs text-zinc-400">{url}</span>
               </div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={screenshot} alt={`Homepage of ${url}`} className="block w-full" />
+              <img src={screenshot} alt={`Homepage of ${url}`} className="block max-h-[52vh] w-full object-cover object-top" />
             </div>
             <figcaption className="text-sm text-zinc-500">Reading it now. The palette is pulled off this page.</figcaption>
           </figure>
@@ -68,7 +68,7 @@ export function Canvas({
             <img
               src={imgUrl}
               alt="Rendered post"
-              className={`max-h-[78vh] w-auto rounded-lg shadow-xl ring-1 ring-black/5 transition-opacity ${rendering ? "opacity-70" : ""}`}
+              className={`max-h-full w-auto rounded-lg object-contain shadow-xl ring-1 ring-black/5 transition-opacity ${rendering ? "opacity-70" : ""}`}
             />
           ) : (
             <p className="text-sm text-zinc-400">Rendering…</p>
@@ -77,7 +77,7 @@ export function Canvas({
       </div>
 
       {mode === "post" ? (
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-3">
           <div className="flex rounded-lg bg-zinc-100 p-0.5">
             {(["statement", "split"] as const).map((t) => (
               <button

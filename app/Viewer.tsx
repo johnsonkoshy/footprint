@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   Audience,
@@ -42,8 +43,17 @@ import type { StageStatus } from "@/components/stages/Stage";
 type Phase = "idle" | "capturing" | "auditing" | "ready" | "failed";
 const STORE_KEY = "footprint:viewer";
 
+const STEPS = ["Brand", "Market", "Plan", "Post"] as const;
+
+/** One definition of "we advise this", used to seed the picks and to test them. */
+const isRecommended = (c: { move: string }) => c.move === "start-here" || c.move === "next";
+
 export function Viewer() {
-  const [url, setUrl] = useState("");
+  const params = useSearchParams();
+  const [url, setUrl] = useState(params.get("url") ?? "");
+  /** null means "follow the work"; a number means the user chose this step. */
+  const [pinnedStep, setPinnedStep] = useState<number | null>(null);
+  const started = useRef(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +99,6 @@ export function Viewer() {
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState<string | null>(null);
 
-  const planRef = useRef<HTMLDivElement>(null);
-  const postRef = useRef<HTMLDivElement>(null);
-
   // ---------- persistence: a refresh must not cost a minute ----------
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -100,6 +107,10 @@ export function Viewer() {
       if (!saved) return;
       const s = JSON.parse(saved);
       if (!s.kit) return;
+      // Arriving from the landing page for a different company must not resume
+      // the last one just because its kit is still in storage.
+      const incoming = params.get("url")?.trim();
+      if (incoming && s.url && s.url.trim() !== incoming) return;
       setKit(s.kit);
       setMeta(s.meta ?? null);
       setUrl(s.url ?? "");
@@ -113,11 +124,25 @@ export function Viewer() {
       setTopic(s.topic ?? "");
       setContent(s.content ?? null);
       setTemplate(s.template ?? "statement");
+      // Without these the restored plan renders with nothing ticked, which
+      // reads as "pick at least one channel" on a plan that already has some -
+      // and the save effect then writes the empty picks back over the good ones.
+      if (s.plan) {
+        setPickedChannels(
+          s.pickedChannels?.length ? s.pickedChannels : s.plan.channels.filter(isRecommended).map((c: { name: string }) => c.name),
+        );
+        setPickedFormats(
+          s.pickedFormats?.length ? s.pickedFormats : s.plan.contentTypes.map((c: { name: string }) => c.name),
+        );
+      }
       setPhase("ready");
     } catch {
       /* a corrupt cache is not worth a crash */
     }
     /* eslint-enable react-hooks/set-state-in-effect */
+    // params is read to scope the restore to the requested company; it is
+    // stable for the life of the page, so this still runs once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -128,12 +153,13 @@ export function Viewer() {
         JSON.stringify({
           url, kit, meta, capture, signals, siteText, audience, competitors,
           plan, channel, goal, brief, topicIndex, topic, content, template,
+          pickedChannels, pickedFormats,
         }),
       );
     } catch {
       /* quota or private mode - state just won't survive a refresh */
     }
-  }, [url, kit, meta, capture, signals, siteText, audience, competitors, plan, channel, goal, brief, topicIndex, topic, content, template]);
+  }, [url, kit, meta, capture, signals, siteText, audience, competitors, plan, channel, goal, brief, topicIndex, topic, content, template, pickedChannels, pickedFormats]);
 
   useEffect(() => {
     fetch("/api/publish")
@@ -177,9 +203,7 @@ export function Viewer() {
         setSignals(res.signals);
         setPlanNotes(res.usedFallback ? res.notes : []);
         setChannel(res.plan.channels.find((c) => c.move === "start-here")?.name ?? "");
-        setPickedChannels(
-          res.plan.channels.filter((c) => c.move === "start-here" || c.move === "next").map((c) => c.name),
-        );
+        setPickedChannels(res.plan.channels.filter(isRecommended).map((c) => c.name));
         setPickedFormats(res.plan.contentTypes.map((c) => c.name));
         setTopicIndex(0);
         setTopic(res.plan.contentTypes[0]?.topic ?? "");
@@ -192,8 +216,10 @@ export function Viewer() {
     [url],
   );
 
-  const runExtract = async () => {
-    if (!url.trim()) return;
+  const runExtract = async (raw?: string) => {
+    const target = (raw ?? url).trim();
+    if (!target) return;
+    setUrl(target);
     setPhase("capturing");
     setElapsed(0);
     setError(null);
@@ -209,8 +235,9 @@ export function Viewer() {
     setContent(null);
     setImgUrl(null);
     setPublished(null);
+    setPinnedStep(null);
     try {
-      const { kit: k, ...rest } = await extractStream(url.trim(), (c) => {
+      const { kit: k, ...rest } = await extractStream(target, (c) => {
         setCapture(c);
         setSignals(c.signals);
         setPhase("auditing");
@@ -288,6 +315,33 @@ export function Viewer() {
     }
   };
 
+  /**
+   * Arriving from the landing page with ?url= starts the run on mount. The ref
+   * guard is what keeps a re-render from extracting the same site twice.
+   */
+  useEffect(() => {
+    const incoming = params.get("url");
+    if (!incoming || started.current) return;
+    started.current = true;
+    // `kit` is still null in this closure even when the restore effect above
+    // just set it - both effects run in the same commit. Ask storage instead,
+    // or a refresh silently pays for the whole extraction again.
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(STORE_KEY) ?? "{}");
+      if (saved.kit && saved.url?.trim() === incoming.trim()) return;
+    } catch {
+      /* unreadable cache just means we extract, which is the safe direction */
+    }
+    // Kicking off the run is the whole job of this effect, and runExtract sets
+    // phase synchronously so the loading state paints on the first frame. The
+    // cascade the rule guards against is the point here, once, on mount.
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
+    runExtract(incoming);
+    // runExtract is recreated every render; the ref guard above is what makes
+    // this run once, so depending on it would defeat the guard.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+
   const runGenerate = async (override?: { brief?: Brief }) => {
     const t = topic.trim();
     if (!kit || !t) return;
@@ -309,7 +363,7 @@ export function Viewer() {
     const next: Brief = { channel: picked?.name, format: plan.contentTypes[topicIndex]?.name, cadence: picked?.cadence };
     setBrief(next);
     runGenerate({ brief: next });
-    postRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setPinnedStep(3);
   };
 
   const draw = useCallback(async () => {
@@ -333,10 +387,6 @@ export function Viewer() {
     return () => clearTimeout(id);
   }, [draw]);
 
-  // Bring the decision into view when it lands; the user was reading above it.
-  useEffect(() => {
-    if (plan && !content) planRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [plan, content]);
 
 
   const sendPost = async () => {
@@ -370,8 +420,13 @@ export function Viewer() {
     planError ? "error" : plan ? "done" : planning ? "working" : "pending";
   const postStatus: StageStatus = content ? "done" : generating ? "working" : "pending";
 
-  // The plan on screen was written for a different selection than the one ticked.
-  const planChannels = plan?.channels.filter((c) => c.move !== "skip").map((c) => c.name) ?? [];
+  /**
+   * The plan on screen was written for a different selection than the one
+   * ticked. This predicate must match the one that seeds the selection in
+   * runPlan - when they disagreed, a plan containing a "later" channel showed
+   * as dirty the instant it arrived, before anyone had touched a thing.
+   */
+  const planChannels = plan?.channels.filter(isRecommended).map((c) => c.name) ?? [];
   const planFormats = plan?.contentTypes.map((c) => c.name) ?? [];
   const sameSet = (a: string[], b: string[]) =>
     a.length === b.length && a.every((x) => b.includes(x));
@@ -387,116 +442,128 @@ export function Viewer() {
 
   const canvasMode = imgUrl || content ? "post" : capture?.screenshot ? "screenshot" : "empty";
 
-  const steps: { label: string; state: "done" | "now" | "todo" }[] = [
-    { label: "Brand", state: kit ? "done" : extracting ? "now" : "todo" },
-    { label: "Footprint", state: signals && audience ? "done" : signals ? "now" : "todo" },
-    { label: "Market", state: audience ? "done" : audienceWorking ? "now" : "todo" },
-    { label: "Plan", state: brief ? "done" : plan ? "now" : "todo" },
-    { label: "Post", state: imgUrl ? "done" : generating ? "now" : "todo" },
-  ];
+  const furthest = content ? 3 : plan ? 2 : audience ? 1 : 0;
+  const ready = [Boolean(kit), Boolean(audience), Boolean(plan), Boolean(content)];
+
+  /**
+   * The view follows the work forward on its own until the user navigates, and
+   * then stays where they put it. Derived rather than synced in an effect, so
+   * there is no second render and no moment where the two disagree.
+   */
+  const step = pinnedStep ?? furthest;
+
+  const goto = (i: number) => setPinnedStep(Math.max(0, Math.min(STEPS.length - 1, i)));
+
+  const primary = (() => {
+    if (step === 2 && plan) {
+      return {
+        label: generating ? "Writing…" : `Write this post for ${effectiveChannel || "them"}`,
+        onClick: writePost,
+        disabled: generating || !topic.trim() || !pickedChannels.length,
+      };
+    }
+    if (step < 3 && ready[step + 1]) {
+      return { label: `Next: ${STEPS[step + 1]}`, onClick: () => goto(step + 1), disabled: false };
+    }
+    if (step === 3 && content) {
+      return { label: "Write another", onClick: () => goto(2), disabled: false };
+    }
+    return null;
+  })();
 
   return (
-    <div className="flex min-h-screen flex-col">
-      {/* ---------------- top bar ---------------- */}
-      <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[1400px] items-center gap-4 px-6 py-3">
-          <span className="shrink-0 text-sm font-semibold tracking-tight">Footprint</span>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              runExtract();
-            }}
-            className="flex min-w-0 flex-1 gap-2"
-          >
-            <input
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="stripe.com"
-              className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm outline-none focus:border-zinc-900"
-              aria-label="Company URL"
-            />
-            <button
-              type="submit"
-              disabled={extracting || !url.trim()}
-              className="shrink-0 rounded-lg bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-            >
-              {extracting ? "Reading…" : "Read the brand"}
-            </button>
-          </form>
-          <Link href="/compare" className="shrink-0 text-sm text-zinc-500 hover:text-zinc-900">
-            Compare two brands
+    <div className="flex h-screen flex-col overflow-hidden bg-white">
+      {/* ---------------- header: identity, progress, escape ---------------- */}
+      <header className="shrink-0 border-b border-zinc-200">
+        <div className="mx-auto flex w-full max-w-[1500px] items-center gap-6 px-6 py-3">
+          <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight">
+            Footprint
+          </Link>
+
+          <ol className="flex min-w-0 flex-1 items-center gap-1">
+            {STEPS.map((label, i) => {
+              const state = ready[i] ? "done" : i === furthest ? "now" : "todo";
+              const reachable = ready[i] || i <= furthest;
+              return (
+                <li key={label} className="flex min-w-0 items-center">
+                  {i > 0 ? <span aria-hidden className="mx-1 h-px w-4 shrink-0 bg-zinc-200 sm:w-8" /> : null}
+                  <button
+                    onClick={() => reachable && goto(i)}
+                    disabled={!reachable}
+                    aria-current={step === i ? "step" : undefined}
+                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm transition ${
+                      step === i
+                        ? "bg-zinc-900 text-white"
+                        : reachable
+                          ? "text-zinc-600 hover:bg-zinc-100"
+                          : "text-zinc-300"
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                        state === "done"
+                          ? step === i
+                            ? "bg-white"
+                            : "bg-zinc-900"
+                          : state === "now"
+                            ? "animate-pulse bg-amber-500"
+                            : "bg-zinc-300"
+                      }`}
+                    />
+                    {label}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+
+          <span className="hidden min-w-0 shrink truncate text-sm text-zinc-400 sm:block">{url}</span>
+          <Link href="/" className="shrink-0 text-sm text-zinc-500 hover:text-zinc-900">
+            Start over
           </Link>
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 gap-8 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        {/* ---------------- left: the story ---------------- */}
-        <div className="flex flex-col gap-4">
-          <ol className="flex items-center gap-2 text-xs">
-            {steps.map((s, i) => (
-              <li key={s.label} className="flex items-center gap-2">
-                {i > 0 ? <span className="text-zinc-300">—</span> : null}
-                <span
-                  className={
-                    s.state === "done"
-                      ? "text-zinc-900"
-                      : s.state === "now"
-                        ? "font-medium text-zinc-900"
-                        : "text-zinc-400"
-                  }
-                >
-                  {s.state === "done" ? "✓ " : null}
-                  {s.label}
-                </span>
-              </li>
-            ))}
-          </ol>
-
-          {phase === "idle" && !kit ? (
-            <p className="text-sm text-zinc-500">
-              Try{" "}
-              {["stripe.com", "tartinebakery.com", "craigslist.org"].map((u, i) => (
-                <span key={u}>
-                  {i > 0 ? ", " : ""}
-                  <button onClick={() => setUrl(u)} className="underline underline-offset-2 hover:text-zinc-900">
-                    {u}
-                  </button>
-                </span>
-              ))}
-              .
-            </p>
+      {/* ---------------- body: one step, one canvas, no page scroll ---------------- */}
+      <main className="mx-auto grid min-h-0 w-full max-w-[1500px] flex-1 grid-cols-1 gap-8 px-6 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {/* min-h-0 is what lets this column scroll instead of stretching the page. */}
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+          {step === 0 ? (
+            <BrandStage
+              status={brandStatus}
+              elapsed={elapsed}
+              screenshot={capture?.screenshot ?? null}
+              siteTitle={capture?.title ?? null}
+              kit={kit}
+              fonts={meta?.fonts}
+              notes={
+                phase === "failed"
+                  ? [error ?? ""]
+                  : meta?.usedFallback
+                    ? ["Extraction fell back to a neutral kit.", ...meta.notes]
+                    : meta?.degraded
+                      ? ["This site blocked our browser, so the palette is a guess."]
+                      : []
+              }
+              onChange={setKit}
+            />
           ) : null}
 
-          <BrandStage
-            status={brandStatus}
-            elapsed={elapsed}
-            screenshot={capture?.screenshot ?? null}
-            siteTitle={capture?.title ?? null}
-            kit={kit}
-            fonts={meta?.fonts}
-            notes={
-              phase === "failed"
-                ? [error ?? ""]
-                : meta?.usedFallback
-                  ? ["Extraction fell back to a neutral kit.", ...meta.notes]
-                  : meta?.degraded
-                    ? ["This site blocked our browser, so the palette is a guess."]
-                    : []
-            }
-            onChange={setKit}
-          />
+          {step === 1 ? (
+            <>
+              <FootprintStage status={footprintStatus} signals={signals} plan={plan} />
+              <MarketStage
+                status={marketStatus}
+                audience={audience}
+                competitors={competitors}
+                competitorsWorking={competitorsWorking}
+                elapsed={marketElapsed}
+              />
+            </>
+          ) : null}
 
-          <FootprintStage status={footprintStatus} signals={signals} plan={plan} />
-
-          <MarketStage
-            status={marketStatus}
-            audience={audience}
-            competitors={competitors}
-            competitorsWorking={competitorsWorking}
-            elapsed={marketElapsed}
-          />
-
-          <div ref={planRef}>
+          {step === 2 ? (
             <PlanStage
               status={planStatus}
               elapsed={planElapsed}
@@ -533,9 +600,9 @@ export function Viewer() {
               rebuilding={rebuilding}
               dirty={selectionDirty}
             />
-          </div>
+          ) : null}
 
-          <div ref={postRef}>
+          {step === 3 ? (
             <PostStage
               status={postStatus}
               brief={brief}
@@ -547,11 +614,10 @@ export function Viewer() {
               published={published}
               error={renderError}
             />
-          </div>
+          ) : null}
         </div>
 
-        {/* ---------------- right: the artifact ---------------- */}
-        <div className="lg:sticky lg:top-[60px] lg:self-start">
+        <div className="flex min-h-0 flex-col">
           <Canvas
             mode={canvasMode}
             url={capture?.url ?? url}
@@ -564,6 +630,41 @@ export function Viewer() {
           />
         </div>
       </main>
+
+      {/* ---------------- footer: back, where you are, forward ---------------- */}
+      <footer className="shrink-0 border-t border-zinc-200 bg-white">
+        <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-4 px-6 py-3">
+          <button
+            onClick={() => goto(step - 1)}
+            disabled={step === 0}
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium disabled:opacity-30"
+          >
+            Back
+          </button>
+
+          <p className="min-w-0 truncate text-sm text-zinc-500">
+            {phase === "failed"
+              ? "Couldn't read that site."
+              : !ready[step] && step === furthest
+                ? `Working on ${STEPS[step].toLowerCase()}…`
+                : step < 3 && !ready[step + 1]
+                  ? `${STEPS[step + 1]} is still being written`
+                  : ""}
+          </p>
+
+          {primary ? (
+            <button
+              onClick={primary.onClick}
+              disabled={primary.disabled}
+              className="rounded-lg bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+            >
+              {primary.label}
+            </button>
+          ) : (
+            <span className="w-16" />
+          )}
+        </div>
+      </footer>
     </div>
   );
 }

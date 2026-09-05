@@ -1,5 +1,36 @@
 import { chromium, type Browser } from "playwright";
 
+/**
+ * Everything the marketing audit needs that we can grab for free while the
+ * page is already open. Raw and uninterpreted on purpose - lib/strategy/signals
+ * turns it into evidence, and does the same job from plain HTML when headless
+ * Chrome gets bounced.
+ */
+export type PageSignalsRaw = {
+  /** every absolute href on the page, deduped */
+  links: string[];
+  /** script src URLs, for marketing-tech fingerprinting */
+  scripts: string[];
+  /**
+   * Every host the page actually talked to while loading. Script tags alone
+   * miss anything injected by a tag manager, which is most of modern martech.
+   */
+  requestHosts: string[];
+  /** email inputs anywhere on the page - a proxy for list building */
+  emailInputs: number;
+  twitterCard: boolean;
+  rss: boolean;
+};
+
+export const EMPTY_RAW: PageSignalsRaw = {
+  links: [],
+  scripts: [],
+  requestHosts: [],
+  emailInputs: 0,
+  twitterCard: false,
+  rss: false,
+};
+
 export type SiteCapture = {
   url: string;
   /** base64 PNG of the homepage, or null if the site bounced us */
@@ -11,6 +42,7 @@ export type SiteCapture = {
   /** absolute URLs of <img> tags that look like a logo, best guess first */
   logoCandidates: string[];
   text: string;
+  raw: PageSignalsRaw;
   /** true when we got text but no screenshot - extraction quality will suffer */
   degraded: boolean;
   note?: string;
@@ -46,6 +78,17 @@ async function capture(browser: Browser, url: string): Promise<SiteCapture> {
     locale: "en-US",
   });
   const page = await context.newPage();
+
+  // Third-party calls are the honest record of what marketing tech is live.
+  const requestHosts = new Set<string>();
+  page.on("request", (req) => {
+    try {
+      requestHosts.add(new URL(req.url()).host);
+    } catch {
+      /* data: and blob: URLs have no host, which is fine */
+    }
+  });
+
   try {
     await page.goto(url, { waitUntil: "load", timeout: 25_000 });
     // Let webfonts swap in and hero animations settle before we photograph it.
@@ -83,6 +126,14 @@ async function capture(browser: Browser, url: string): Promise<SiteCapture> {
         .filter((v): v is string => Boolean(v))
         .slice(0, 5);
 
+      const links = Array.from(document.querySelectorAll("a[href]"))
+        .map((a) => abs(a.getAttribute("href")))
+        .filter((v): v is string => Boolean(v));
+
+      const scripts = Array.from(document.querySelectorAll("script[src]"))
+        .map((s) => abs(s.getAttribute("src")))
+        .filter((v): v is string => Boolean(v));
+
       return {
         title: document.title ?? "",
         description:
@@ -97,6 +148,19 @@ async function capture(browser: Browser, url: string): Promise<SiteCapture> {
         ),
         logoCandidates: logos,
         text: document.body?.innerText ?? "",
+        raw: {
+          links: Array.from(new Set(links)).slice(0, 400),
+          scripts: Array.from(new Set(scripts)).slice(0, 120),
+          emailInputs: document.querySelectorAll(
+            'input[type="email"], input[name*="email" i], input[placeholder*="email" i]',
+          ).length,
+          twitterCard: Boolean(document.querySelector('meta[name="twitter:card"]')),
+          rss: Boolean(
+            document.querySelector(
+              'link[type="application/rss+xml"], link[type="application/atom+xml"]',
+            ),
+          ),
+        },
       };
     });
 
@@ -111,6 +175,7 @@ async function capture(browser: Browser, url: string): Promise<SiteCapture> {
       favicon: meta.favicon,
       logoCandidates: meta.logoCandidates,
       text: firstWords(meta.text, 2000),
+      raw: { ...meta.raw, requestHosts: [...requestHosts].slice(0, 200) },
       degraded: false,
     };
   } finally {
@@ -154,6 +219,7 @@ async function captureDegraded(url: string, note: string): Promise<SiteCapture> 
       favicon: absolute(pick(/<link[^>]+rel=["'][^"']*icon[^"']*["'][^>]+href=["']([^"']+)["']/i)),
       logoCandidates: [],
       text: firstWords(text, 2000),
+      raw: rawFromHtml(html, url),
       degraded: true,
       note,
     };
@@ -167,10 +233,37 @@ async function captureDegraded(url: string, note: string): Promise<SiteCapture> 
       favicon: null,
       logoCandidates: [],
       text: "",
+      raw: EMPTY_RAW,
       degraded: true,
       note: `${note}; plain fetch also failed: ${String(err)}`,
     };
   }
+}
+
+/** The no-browser version of the in-page collector. Same fields, worse recall. */
+export function rawFromHtml(html: string, baseUrl: string): PageSignalsRaw {
+  const absolute = (href: string) => {
+    try {
+      return new URL(href, baseUrl).toString();
+    } catch {
+      return null;
+    }
+  };
+  const all = (re: RegExp) =>
+    Array.from(html.matchAll(re))
+      .map((m) => absolute(m[1]))
+      .filter((v): v is string => Boolean(v));
+
+  return {
+    links: Array.from(new Set(all(/<a[^>]+href=["']([^"']+)["']/gi))).slice(0, 400),
+    scripts: Array.from(new Set(all(/<script[^>]+src=["']([^"']+)["']/gi))).slice(0, 120),
+    emailInputs: (html.match(/<input[^>]+(type=["']email["']|name=["'][^"']*email|placeholder=["'][^"']*email)/gi) ?? [])
+      .length,
+    // A plain fetch never executes anything, so there are no request hosts.
+    requestHosts: [],
+    twitterCard: /<meta[^>]+name=["']twitter:card["']/i.test(html),
+    rss: /<link[^>]+type=["']application\/(rss|atom)\+xml["']/i.test(html),
+  };
 }
 
 function firstWords(text: string, count: number): string {

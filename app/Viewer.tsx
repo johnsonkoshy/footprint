@@ -1,9 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BrandKit, ContentSet, TemplateId } from "@/types";
-import { extract, generate, renderPng, stageFor, type ExtractResponse } from "@/lib/client";
+import type { BrandKit, ContentSet, MarketingPlan, SiteSignals, TemplateId } from "@/types";
+import {
+  extract,
+  generate,
+  planStageFor,
+  renderPng,
+  stageFor,
+  strategize,
+  type Brief,
+  type ExtractResponse,
+} from "@/lib/client";
 import { KitPanel } from "@/components/KitPanel";
+import { PlanPanel } from "@/components/PlanPanel";
 
 type Phase = "idle" | "extracting" | "ready" | "failed";
 const STORE_KEY = "footprint:viewer";
@@ -15,6 +25,21 @@ export function Viewer() {
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<Omit<ExtractResponse, "kit"> | null>(null);
   const [kit, setKit] = useState<BrandKit | null>(null);
+
+  // The plan stage: audit their existing footprint, propose a strategy, and
+  // wait for the user to approve it before anything gets written.
+  const [signals, setSignals] = useState<SiteSignals | null>(null);
+  const [plan, setPlan] = useState<MarketingPlan | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [planElapsed, setPlanElapsed] = useState(0);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [planNotes, setPlanNotes] = useState<string[]>([]);
+  const [goal, setGoal] = useState("");
+  const [channel, setChannel] = useState("");
+  const [topicIndex, setTopicIndex] = useState(0);
+  const [confirmed, setConfirmed] = useState(false);
+  const [tab, setTab] = useState<"plan" | "post">("plan");
+  const [brief, setBrief] = useState<Brief | undefined>(undefined);
 
   const [topic, setTopic] = useState("announcing a new integrations marketplace");
   const [content, setContent] = useState<ContentSet | null>(null);
@@ -49,6 +74,16 @@ export function Viewer() {
       if (s.content) setContent(s.content);
       if (s.topic) setTopic(s.topic);
       if (s.template) setTemplate(s.template);
+      if (s.signals) setSignals(s.signals);
+      if (s.plan) setPlan(s.plan);
+      if (s.channel) setChannel(s.channel);
+      if (s.goal) setGoal(s.goal);
+      if (s.brief) setBrief(s.brief);
+      if (typeof s.topicIndex === "number") setTopicIndex(s.topicIndex);
+      if (s.confirmed) {
+        setConfirmed(true);
+        setTab("post");
+      }
     } catch {
       /* a corrupt cache is not worth a crash */
     }
@@ -58,11 +93,17 @@ export function Viewer() {
   useEffect(() => {
     if (!kit) return;
     try {
-      sessionStorage.setItem(STORE_KEY, JSON.stringify({ url, kit, meta, content, topic, template }));
+      sessionStorage.setItem(
+        STORE_KEY,
+        JSON.stringify({
+          url, kit, meta, content, topic, template,
+          signals, plan, channel, goal, brief, topicIndex, confirmed,
+        }),
+      );
     } catch {
       /* quota or private mode - state just won't survive a refresh */
     }
-  }, [url, kit, meta, content, topic, template]);
+  }, [url, kit, meta, content, topic, template, signals, plan, channel, goal, brief, topicIndex, confirmed]);
 
   useEffect(() => {
     fetch("/api/publish")
@@ -70,6 +111,13 @@ export function Viewer() {
       .then(setPublish)
       .catch(() => setPublish({ configured: false, name: "Bluesky" }));
   }, []);
+
+  useEffect(() => {
+    if (!planning) return;
+    const started = Date.now();
+    const id = setInterval(() => setPlanElapsed((Date.now() - started) / 1000), 250);
+    return () => clearInterval(id);
+  }, [planning]);
 
   useEffect(() => {
     if (phase !== "extracting") return;
@@ -85,22 +133,73 @@ export function Viewer() {
     setError(null);
     setContent(null);
     setImgUrl(null);
+    setPlan(null);
+    setSignals(null);
+    setPlanError(null);
+    setConfirmed(false);
+    setTab("plan");
     try {
       const { kit: k, ...rest } = await extract(url.trim());
       setKit(k);
       setMeta(rest);
       setPhase("ready");
+      // The plan takes longer than the extraction did, so start it now - the
+      // user reads the brand panel while it runs instead of waiting twice.
+      runPlan(k, rest.signals, "");
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
       setPhase("failed");
     }
   };
 
-  const runGenerate = async () => {
-    if (!kit || !topic.trim()) return;
+  const runPlan = useCallback(
+    async (k: BrandKit, s: SiteSignals | null, g: string) => {
+      setPlanning(true);
+      setPlanElapsed(0);
+      setPlanError(null);
+      try {
+        const res = await strategize(k, url.trim(), s, g);
+        setPlan(res.plan);
+        setSignals(res.signals);
+        setPlanNotes(res.usedFallback ? res.notes : []);
+        setChannel(res.plan.channels.find((c) => c.move === "start-here")?.name ?? "");
+        setTopicIndex(0);
+        setTopic(res.plan.contentTypes[0]?.topic ?? topic);
+      } catch (err) {
+        setPlanError(String(err instanceof Error ? err.message : err));
+      } finally {
+        setPlanning(false);
+      }
+    },
+    // `topic` is only read as a fallback when the plan has no content types.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [url],
+  );
+
+  /** The gate the whole stage exists for: nothing is written until this runs. */
+  const confirmPlan = () => {
+    if (!plan) return;
+    const picked = plan.channels.find((c) => c.name === channel);
+    const next: Brief = {
+      channel: picked?.name,
+      format: plan.contentTypes[topicIndex]?.name,
+      cadence: picked?.cadence,
+    };
+    setBrief(next);
+    setConfirmed(true);
+    setTab("post");
+    runGenerate({ brief: next });
+  };
+
+  // Overrides exist because confirming a plan writes immediately, and React
+  // state set in the same tick is not readable yet.
+  const runGenerate = async (override?: { topic?: string; brief?: Brief }) => {
+    const t = (override?.topic ?? topic).trim();
+    if (!kit || !t) return;
     setGenerating(true);
+    setRenderError(null);
     try {
-      setContent(await generate(kit, topic.trim()));
+      setContent(await generate(kit, t, override?.brief ?? brief));
     } catch (err) {
       setRenderError(String(err instanceof Error ? err.message : err));
     } finally {
@@ -246,8 +345,100 @@ export function Viewer() {
         ) : null}
       </section>
 
-      {/* ---------------- Right: the post ---------------- */}
+      {/* ---------------- Right: the plan, then the post ---------------- */}
       <section className="flex flex-col gap-5">
+        {kit ? (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex rounded-lg bg-zinc-100 p-0.5">
+              {(["plan", "post"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  disabled={t === "post" && !confirmed}
+                  className={`rounded-[6px] px-3 py-1.5 text-sm capitalize transition disabled:opacity-40 ${
+                    tab === t ? "bg-white font-medium shadow-sm" : "text-zinc-500"
+                  }`}
+                >
+                  {t === "plan" ? "Plan" : "Post"}
+                </button>
+              ))}
+            </div>
+            {confirmed && tab === "post" ? (
+              <p className="truncate text-xs text-zinc-400">
+                Writing {brief?.format ? `a ${brief.format.toLowerCase()}` : "a post"}
+                {brief?.channel ? ` for ${brief.channel}` : ""}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {tab === "plan" ? (
+          planning ? (
+            <div className="rounded-lg border border-zinc-200 p-4">
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-medium">{planStageFor(planElapsed)}</span>
+                <span className="font-mono text-xs text-zinc-400">{planElapsed.toFixed(0)}s</span>
+              </div>
+              <div className="mt-3 h-1 overflow-hidden rounded bg-zinc-100">
+                <div
+                  className="h-full bg-zinc-900 transition-[width] duration-300"
+                  style={{ width: `${Math.min(95, (planElapsed / 95) * 100)}%` }}
+                />
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">
+                We probe their blog, changelog and social links, then audit what we found. Around
+                90 seconds — read the brand panel while it runs.
+              </p>
+            </div>
+          ) : planError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm">
+              <p className="font-medium text-red-800">Could not build a plan</p>
+              <p className="mt-1 break-words text-red-700">{planError}</p>
+              <button
+                onClick={() => kit && runPlan(kit, signals, goal)}
+                className="mt-3 text-sm font-medium text-red-800 underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : plan && signals ? (
+            <>
+              {planNotes.length ? (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-200">
+                  The plan fell back to a default. {planNotes.join("; ")}
+                </p>
+              ) : null}
+              <PlanPanel
+                plan={plan}
+                signals={signals}
+                goal={goal}
+                onGoalChange={setGoal}
+                onReplan={() => kit && runPlan(kit, signals, goal)}
+                replanning={planning}
+                channel={channel}
+                onChannelChange={setChannel}
+                topicIndex={topicIndex}
+                onTopicIndexChange={(i) => {
+                  setTopicIndex(i);
+                  setTopic(plan.contentTypes[i]?.topic ?? topic);
+                }}
+                topic={topic}
+                onTopicChange={setTopic}
+                onConfirm={confirmPlan}
+              />
+            </>
+          ) : (
+            <div className="flex min-h-[400px] items-center justify-center rounded-xl bg-zinc-50 p-6 text-center text-sm text-zinc-400 ring-1 ring-inset ring-zinc-200/70">
+              <p className="max-w-xs">
+                Extract a brand and we will audit the marketing they already have, then propose
+                what to do next.
+              </p>
+            </div>
+          )
+        ) : null}
+
+        {tab === "post" ? (
+        <>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -341,6 +532,8 @@ export function Viewer() {
               </div>
             ) : null}
           </div>
+        ) : null}
+        </>
         ) : null}
       </section>
     </main>

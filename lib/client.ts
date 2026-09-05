@@ -1,9 +1,10 @@
-import type { BrandKit, ContentSet, TemplateId } from "@/types";
+import type { BrandKit, ContentSet, MarketingPlan, SiteSignals, TemplateId } from "@/types";
 
 /** Shared browser-side calls. Kept out of components so /compare can reuse them. */
 
 export type ExtractResponse = {
   kit: BrandKit;
+  signals: SiteSignals;
   usedFallback: boolean;
   degraded: boolean;
   fonts: { display: { requested: string; google: string }; body: { requested: string; google: string } };
@@ -22,15 +23,47 @@ export async function extract(url: string): Promise<ExtractResponse> {
   return json;
 }
 
-export async function generate(kit: BrandKit, topic: string): Promise<ContentSet> {
+export type Brief = { channel?: string; format?: string; cadence?: string };
+
+export async function generate(
+  kit: BrandKit,
+  topic: string,
+  brief?: Brief,
+): Promise<ContentSet> {
   const res = await fetch("/api/generate", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kit, topic }),
+    body: JSON.stringify({ kit, topic, brief }),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error ?? `Generation failed (${res.status})`);
   return json.content;
+}
+
+export type StrategyResponse = {
+  plan: MarketingPlan;
+  signals: SiteSignals;
+  usedFallback: boolean;
+  model: string;
+  notes: string[];
+  ms: number;
+  probeMs: number;
+};
+
+export async function strategize(
+  kit: BrandKit,
+  url: string,
+  signals: SiteSignals | null,
+  goal = "",
+): Promise<StrategyResponse> {
+  const res = await fetch("/api/strategy", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kit, url, signals, goal }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? `Strategy failed (${res.status})`);
+  return json;
 }
 
 /** Returns an object URL for the rendered PNG. Caller revokes it. */
@@ -63,5 +96,20 @@ export const EXTRACT_STAGES = [
 export function stageFor(elapsedSeconds: number): string {
   let label: string = EXTRACT_STAGES[0].label;
   for (const s of EXTRACT_STAGES) if (elapsedSeconds >= s.at) label = s.label;
+  return label;
+}
+
+/** Measured: probes land ~1.5s in, the plan itself runs 60-95s on Sonnet. */
+export const PLAN_STAGES = [
+  { at: 0, label: "Checking their marketing surfaces" },
+  { at: 3, label: "Reading the footprint" },
+  { at: 8, label: "Auditing where they stand" },
+  { at: 35, label: "Writing the plan" },
+  { at: 80, label: "Still writing - this one is thorough" },
+] as const;
+
+export function planStageFor(elapsedSeconds: number): string {
+  let label: string = PLAN_STAGES[0].label;
+  for (const s of PLAN_STAGES) if (elapsedSeconds >= s.at) label = s.label;
   return label;
 }

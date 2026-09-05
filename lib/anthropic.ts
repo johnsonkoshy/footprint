@@ -37,6 +37,9 @@ function pick(envValue: string | undefined, fallback: AllowedModel): AllowedMode
 
 export const EXTRACT_MODEL = pick(process.env.EXTRACT_MODEL, "claude-opus-5");
 export const GENERATE_MODEL = pick(process.env.GENERATE_MODEL, "claude-sonnet-5");
+// Strategy is judgement over evidence we hand it, with no image to read, so it
+// sits with generation rather than extraction.
+export const STRATEGY_MODEL = pick(process.env.STRATEGY_MODEL, "claude-sonnet-5");
 
 export function getClient(): Anthropic {
   if (!hasApiKey()) throw new Error(MISSING_KEY_MESSAGE);

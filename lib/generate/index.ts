@@ -46,7 +46,28 @@ The single failure mode that matters: writing copy that would work equally well
 for any company in this industry. If you could swap the logo and nobody would
 notice, you have failed. Write something only this brand could have written.`;
 
-function buildPrompt(kit: BrandKit, topic: string): string {
+/**
+ * Set once the user has confirmed a plan. It narrows the writing job from
+ * "a post" to "this format, for this channel" - a LinkedIn customer story and
+ * an X changelog note are not the same piece of writing.
+ */
+export type Brief = {
+  channel?: string;
+  format?: string;
+  cadence?: string;
+};
+
+function buildPrompt(kit: BrandKit, topic: string, brief?: Brief): string {
+  const placement =
+    brief?.channel || brief?.format
+      ? `\nWHERE THIS RUNS\n${[
+          brief.channel && `Channel: ${brief.channel}. Write to that platform's conventions - length, formality, how people read there.`,
+          brief.format && `Format: ${brief.format}.`,
+        ]
+          .filter(Boolean)
+          .join("\n")}\n`
+      : "";
+
   return `BRAND: ${kit.name}
 Tagline: ${kit.tagline}
 Imagery language: ${kit.imagery.style}
@@ -56,6 +77,7 @@ tone: ${kit.voice.tone}
 sample sentence from their own site: "${kit.voice.sample}"
 never do these (absolute): ${kit.voice.avoid.map((a) => `\n  - ${a}`).join("")}
 
+${placement}
 TOPIC TO WRITE ABOUT
 ${topic}
 
@@ -73,6 +95,7 @@ export type GenerationResult = {
 export async function generateContent(
   kit: BrandKit,
   topic: string,
+  brief?: Brief,
 ): Promise<GenerationResult> {
   const notes: string[] = [];
 
@@ -87,7 +110,7 @@ export async function generateContent(
 
   const client = getClient();
   const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: buildPrompt(kit, topic) },
+    { role: "user", content: buildPrompt(kit, topic, brief) },
   ];
   let usage: GenerationResult["usage"];
 

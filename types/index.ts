@@ -79,3 +79,133 @@ export const DEFAULT_CONTENT_SET: ContentSet = {
 };
 
 export type TemplateId = "statement" | "split";
+
+/* ------------------------------------------------------------------ *
+ * Stage 2.5: marketing footprint audit -> plan
+ *
+ * SiteSignals is *measured*, not asked for. It is what we can actually see
+ * from outside the company: which social accounts they link, which content
+ * surfaces exist, which marketing tech is loaded on the page. The model gets
+ * these as evidence so the plan is grounded in their real footprint rather
+ * than a generic playbook.
+ * ------------------------------------------------------------------ */
+
+export const SiteSignalsSchema = z.object({
+  socials: z.array(z.object({ platform: z.string(), url: z.string() })),
+  /** Content surfaces: linked from the homepage, and/or reachable by probe. */
+  surfaces: z.array(
+    z.object({
+      label: z.string(),
+      path: z.string(),
+      linked: z.boolean(),
+      reachable: z.boolean(),
+    }),
+  ),
+  /** Marketing/analytics tech detected in page scripts, grouped by what it means. */
+  martech: z.array(z.object({ name: z.string(), category: z.string() })),
+  hasNewsletterCapture: z.boolean(),
+  hasOgImage: z.boolean(),
+  hasTwitterCard: z.boolean(),
+  hasRss: z.boolean(),
+  /** Sites that answer 200 to any path make surface probes meaningless. */
+  softNotFound: z.boolean(),
+  degraded: z.boolean(),
+});
+
+export type SiteSignals = z.infer<typeof SiteSignalsSchema>;
+
+export const EMPTY_SIGNALS: SiteSignals = {
+  socials: [],
+  surfaces: [],
+  martech: [],
+  hasNewsletterCapture: false,
+  hasOgImage: false,
+  hasTwitterCard: false,
+  hasRss: false,
+  softNotFound: false,
+  degraded: true,
+};
+
+export const MarketingPlanSchema = z.object({
+  audit: z.object({
+    maturity: z
+      .enum(["invisible", "emerging", "active", "advanced"])
+      .describe("How much marketing is already out there, judged on the evidence"),
+    headline: z
+      .string()
+      .describe("The verdict as one short clause under 70 characters. Not a sentence with a comma splice"),
+    summary: z.string().describe("Two sentences, maximum three, on where they actually stand"),
+    strengths: z.array(z.string()).describe("Up to 3. Each under 90 characters, each pointing at evidence"),
+    gaps: z.array(z.string()).describe("Up to 3, most costly first. Each under 90 characters"),
+  }),
+  channels: z.array(
+    z.object({
+      name: z.string().describe("Just the platform name, 1-3 words. 'LinkedIn', not 'LinkedIn company page strategy'"),
+      /**
+       * Not asked of the model - computed from what we actually found. We can
+       * see whether a company links an account; we cannot see whether they
+       * post to it, so there is no "active" here on purpose.
+       */
+      presence: z
+        .enum(["linked", "absent", "unverifiable"])
+        .describe("linked = we found an account link; absent = we looked and found none; unverifiable = not visible from a homepage"),
+      move: z
+        .enum(["start-here", "next", "later", "skip"])
+        .describe("Exactly one channel is start-here"),
+      cadence: z.string().describe("Posting rhythm in under 60 characters, e.g. '3x/week, Tue-Thu mornings'"),
+      rationale: z.string().describe("One sentence. Why this channel for this specific company"),
+    }),
+  ),
+  contentTypes: z.array(
+    z.object({
+      name: z.string().describe("Short label, 1-3 words, e.g. 'Customer proof'"),
+      why: z.string().describe("One sentence on why this format suits this brand right now"),
+      topic: z
+        .string()
+        .describe(
+          "A specific, ready-to-write post topic for this company - not a category. " +
+            "This gets fed straight to the copywriter, so make it concrete.",
+        ),
+    }),
+  ),
+  experiments: z.array(
+    z.object({
+      name: z.string(),
+      hypothesis: z.string().describe("One falsifiable 'if we X, then Y' sentence"),
+      method: z.string().describe("One or two sentences. How to run it inside two weeks"),
+      readout: z.string().describe("One sentence: what you measure and when you call it"),
+    }),
+  ),
+  timeline: z.array(
+    z.object({
+      window: z.string().describe("e.g. 'Weeks 1-2'"),
+      focus: z.string().describe("One short clause"),
+      deliverables: z.array(z.string()).describe("Up to 3 countable things, each under 70 characters"),
+    }),
+  ),
+  kpis: z.array(
+    z.object({
+      metric: z.string().describe("Short name, under 40 characters"),
+      target: z.string().describe("A number with a timeframe, not 'increase'"),
+      why: z.string().describe("One sentence: what decision this number would change"),
+    }),
+  ),
+});
+
+export type MarketingPlan = z.infer<typeof MarketingPlanSchema>;
+
+export const DEFAULT_MARKETING_PLAN: MarketingPlan = {
+  audit: {
+    maturity: "emerging",
+    headline: "Not enough signal to judge the current footprint",
+    summary:
+      "We could not read enough of this site to audit its marketing. The plan below is a generic starting point, not a read of this company.",
+    strengths: [],
+    gaps: ["We could not verify any existing marketing surface"],
+  },
+  channels: [],
+  contentTypes: [],
+  experiments: [],
+  timeline: [],
+  kpis: [],
+};

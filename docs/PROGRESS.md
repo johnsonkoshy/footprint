@@ -14,13 +14,42 @@ on-brand rendered images, side by side. **This works today** (see `/compare`).
 | 0 | CLAUDE.md | DONE | Verbatim from the pack |
 | 1 | Scaffold + types | DONE | `npm run dev` and `npm run build` both pass |
 | 2 | Extraction | **DONE, GATE PASSED** | **10 of 10** produced a usable kit (bar was 8) |
+| 2.5 | **Footprint audit + plan** | **DONE, verified** | Real evidence per site; Stripe reads "advanced", a bakery reads "emerging" |
 | 3 | Generation | **DONE, GATE PASSED** | Stripe / Notion / craigslist read as three different companies |
 | 4 | Rendering | DONE, verified | Judged four rendered PNGs. Yes, postable |
 | 5 | Viewer (`/`) | DONE | Empty, loading, fallback and ready states all seen working |
 | 6 | Compare (`/compare`) | DONE, verified | Two brands side by side, screenshotted |
 | 7 | Bluesky publish | CODE DONE, unrun | Needs app-password env vars. **Nothing has been posted** |
 
-All eight steps built and verified against real API calls.
+All eight steps built and verified against real API calls, plus the audit/plan
+stage added on top.
+
+### Stage 2.5 - what it does
+
+Between "here are your colours" and "here is a post", the app now audits the
+marketing the company already has, proposes a plan, and **waits for the user to
+approve it** before writing anything.
+
+The audit is measured, not asked for. While the extraction screenshot is being
+taken we also record every host the page talks to, every link it renders, and
+every script it loads. That yields:
+
+- **social accounts** they actually link to (18 platforms recognised)
+- **content surfaces** that exist - blog, changelog, customer stories, resource
+  library, newsletter, events, podcast, docs - linked in nav, or probed by HTTP
+- **marketing tech** actually running, grouped by what it implies: analytics,
+  paid ads, marketing automation, email, experimentation, conversational
+- whether they capture email, set an OG image, set a Twitter card, ship RSS
+
+The model gets that block as EVIDENCE and returns: a maturity call, a headline
+verdict, strengths and gaps, 4 ranked channels with cadence, 3 content formats
+each carrying a ready-to-write brief, 2 falsifiable experiments, a 3-phase first
+quarter, and 3 KPIs that each name the decision they would change.
+
+The user then picks a channel, edits the brief, optionally adds a constraint and
+re-plans, and hits **Approve**. Approval is what triggers generation - and the
+approved channel and format are passed into the copywriting prompt, so an
+Instagram documentary video and an X changelog note are not the same post.
 
 ---
 
@@ -63,6 +92,9 @@ types/index.ts                  BrandKit + ContentSet, zod schemas, fallbacks
 lib/extract/fetchSite.ts        Playwright capture + text-only fallback, never throws
 lib/extract/fonts.ts            proprietary family -> class -> Google Font
 lib/extract/index.ts            the audit prompt + parse/validate/retry/fallback
+lib/strategy/signals.ts         measured footprint: socials, surfaces, martech, probes
+lib/strategy/index.ts           the strategist prompt + the same safety loop
+components/PlanPanel.tsx        the plan, and the approval gate
 lib/generate/index.ts           voice-enforcing prompt + the same safety loop
 lib/render/contrast.ts          WCAG luminance, ratio, ensureContrast
 lib/render/theme.ts             all colour maths, so templates stay literal-free
@@ -75,7 +107,7 @@ components/templates/           Statement, Split - zero hex literals, checked
 components/KitPanel.tsx         swatches with live colour override
 app/Viewer.tsx                  the single-page viewer
 app/compare/Compare.tsx         the demo
-app/api/{extract,generate,render,fixtures,publish}
+app/api/{extract,strategy,generate,render,fixtures,publish}
 convex/schema.ts, convex/kits.ts, convex/tsconfig.json
 scripts/test-extract.mjs, scripts/test-generate.mjs
 ```
@@ -101,6 +133,12 @@ scripts/test-extract.mjs, scripts/test-generate.mjs
 | 4 | Colour maths lives in `lib/render/theme.ts` | Makes hard rule 1 structural rather than a thing to remember |
 | 5 | `sessionStorage` instead of Convex, for now | Convex login is blocked on you; the Convex code is written and waiting |
 | 5 | Stage labels driven by measured timings | Real numbers from the capture probe, not a spinner |
+| 2.5 | Record every **network host** the page hits, not just `<script src>` | Decisive. Plain HTML said Stripe ran no marketing tech; the request log found Marketo and two ad pixels. Anything a tag manager injects is invisible otherwise |
+| 2.5 | Channel `presence` is **computed from evidence**, never asked of the model | In testing it labelled GitHub "absent" while our own scan had just found the link. We can see whether an account is linked; we cannot see whether it is active, so there is no "active" value |
+| 2.5 | Soft-404 detection before probing surfaces | SPAs that answer 200 for any path would otherwise manufacture eight content surfaces that do not exist |
+| 2.5 | Surface probes run in the **strategy** route, not extraction | Keeps extraction at its measured 14-20s. The free half of the signals rides along with the screenshot |
+| 2.5 | Plan starts automatically the moment extraction returns | It takes longer than the extraction did. The user reads the brand panel while it runs instead of waiting twice |
+| 2.5 | Approval passes `{channel, format, cadence}` into the copywriter | Otherwise the plan is decoration - the post would read the same whichever channel was picked |
 | 7 | `Publisher` interface in its own file | The seam that makes Instagram a new file, not a refactor |
 | - | Deleted the scaffold's `prefers-color-scheme` block | CLAUDE.md puts dark mode explicitly out of scope |
 

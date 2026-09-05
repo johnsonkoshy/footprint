@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { BrandKitSchema } from "@/types";
 import { generateContent } from "@/lib/generate";
+import { z } from "zod";
+
+/** Optional: present only once the user has confirmed a plan. */
+const BriefSchema = z.object({
+  channel: z.string().optional(),
+  format: z.string().optional(),
+  cadence: z.string().optional(),
+});
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  let body: { kit?: unknown; topic?: unknown };
+  let body: { kit?: unknown; topic?: unknown; brief?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -25,6 +33,11 @@ export async function POST(req: Request) {
   }
 
   const startedAt = Date.now();
-  const result = await generateContent(kit.data, body.topic.trim());
+  const brief = BriefSchema.safeParse(body.brief);
+  const result = await generateContent(
+    kit.data,
+    body.topic.trim(),
+    brief.success ? brief.data : undefined,
+  );
   return NextResponse.json({ ...result, ms: Date.now() - startedAt });
 }

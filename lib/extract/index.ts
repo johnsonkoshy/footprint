@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getClient, hasApiKey, EXTRACT_MODEL, MISSING_KEY_MESSAGE } from "@/lib/anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { BrandKitSchema, DEFAULT_BRAND_KIT, type BrandKit } from "@/types";
+import { BrandKitSchema, DEFAULT_BRAND_KIT, type BrandKit, type SiteSignals } from "@/types";
+import { signalsFromPage } from "@/lib/strategy/signals";
 import { fetchSite, type SiteCapture } from "./fetchSite";
 import { resolveFont } from "./fonts";
 
@@ -148,6 +149,8 @@ function coerceKit(draft: z.infer<typeof BrandKitDraftSchema>): unknown {
 }
 
 export type ExtractionResult = {
+  /** Free marketing-footprint read from the same page load. Probes come later. */
+  signals: SiteSignals;
   kit: BrandKit;
   /** true when both attempts failed validation and we served DEFAULT_BRAND_KIT */
   usedFallback: boolean;
@@ -168,6 +171,10 @@ export async function extractBrandKit(
   const site = await fetchSite(rawUrl, opts.browser);
   if (site.degraded) notes.push(site.note ?? "no screenshot");
 
+  // Free: derived from the page we just loaded, no extra requests. The audit
+  // stage adds HTTP probes on top of this only when the user asks for a plan.
+  const signals = signalsFromPage(rawUrl, site.raw, Boolean(site.ogImage));
+
   opts.onStage?.("analyzing");
 
   if (!hasApiKey()) {
@@ -182,6 +189,7 @@ export async function extractBrandKit(
         body: resolveFont(DEFAULT_BRAND_KIT.typography.body),
       },
       notes,
+      signals,
     };
   }
 
@@ -238,6 +246,7 @@ export async function extractBrandKit(
           },
           notes,
           usage,
+          signals,
         };
       }
 
@@ -267,5 +276,6 @@ export async function extractBrandKit(
     },
     notes,
     usage,
+    signals,
   };
 }

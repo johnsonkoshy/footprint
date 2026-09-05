@@ -223,6 +223,26 @@ the "paste yours" fixture pitch beside it, which reads as nonsense next to a
 brand we clearly already have. There is a `brand` canvas mode now: the logo on
 their own surface colour with their palette.
 
+### A cached row can be honestly incomplete
+
+Competitor research takes 25-60 seconds and the row is marked `ready` the moment
+the plan lands, so closing the tab in that window leaves a row that says ready
+but has never had competitors looked up. Restoring it showed "No competitors
+found", which is a lie: we never looked.
+
+Traced by watching the row field by field during an undisturbed run - the write
+path was fine all along (`comp=true` at 63s, `cents=17`), the earlier gap came
+from reloading mid-flight during a test.
+
+Two fixes. `fillGaps` runs after a cache hit and fetches whatever is missing -
+competitors, audience, or the plan - and saves it, so the cache heals itself
+instead of serving a permanent hole. And the UI now distinguishes `null`
+(never searched) from an empty list (searched, found nothing), because those
+are completely different facts to show a founder.
+
+Verified: loading a row that lacked competitors showed "Searching the web…",
+persisted the result, and the next load was a complete hit at 17¢.
+
 ### Migrating a cache is deleting it
 
 Removing `screenshot` from the schema was rejected because the existing row

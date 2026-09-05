@@ -138,10 +138,13 @@ export function MarketStage({
                   </li>
                 ))}
               </ul>
-            ) : (
+            ) : competitors ? (
               <p className="text-sm text-zinc-500">
-                {competitors?.note || "No competitors found."}
+                {competitors.note || "We searched and found no clear competitor for this."}
               </p>
+            ) : (
+              // Null is not an empty result - it means the search never ran.
+              <p className="text-sm text-zinc-400">Not researched yet.</p>
             )}
           </div>
         </div>

@@ -26,6 +26,7 @@ import {
 } from "@/lib/client";
 import { planBodyOf } from "@/lib/strategy/rebuild";
 import { STAGE_CENTS, useBrandCache, type CachedBrand } from "@/lib/cache";
+import { EMPTY_SIGNALS } from "@/types";
 import { BrandStage } from "@/components/stages/BrandStage";
 import { FootprintStage } from "@/components/stages/FootprintStage";
 import { MarketStage } from "@/components/stages/MarketStage";
@@ -340,6 +341,52 @@ export function Viewer() {
     [runPlan, save, url],
   );
 
+  /**
+   * A cached row can be genuinely incomplete. Competitor research takes up to a
+   * minute, and the row is marked ready as soon as the plan lands, so closing
+   * the tab in that window leaves a row that is "ready" but has never had
+   * competitors looked up. Restoring it as-is showed "no competitors found",
+   * which is a lie - we never looked. Fill whatever is missing instead.
+   */
+  const fillGaps = useCallback(
+    (row: CachedBrand) => {
+      const target = row.url;
+      if (!row.kit) return;
+
+      if (!row.competitors) {
+        setCompetitorsWorking(true);
+        findCompetitors(row.kit, row.text ?? "")
+          .then((res) => {
+            setCompetitors(res.data);
+            save({ url: target, competitors: res.data, addCents: STAGE_CENTS.competitors });
+          })
+          .catch((err) =>
+            setCompetitors({
+              competitors: [],
+              note: `Couldn't research the field. ${String(err instanceof Error ? err.message : err)}`,
+            }),
+          )
+          .finally(() => setCompetitorsWorking(false));
+      }
+
+      if (!row.audience) {
+        setAudienceWorking(true);
+        setMarketElapsed(0);
+        readAudience(row.kit, row.signals ?? EMPTY_SIGNALS, row.text ?? "")
+          .then((res) => {
+            setAudience(res.audience);
+            save({ url: target, audience: res.audience, addCents: STAGE_CENTS.audience });
+            if (!row.plan) runPlan(row.kit!, row.signals ?? null, "", res.audience);
+          })
+          .catch(() => {})
+          .finally(() => setAudienceWorking(false));
+      } else if (!row.plan) {
+        runPlan(row.kit, row.signals ?? null, "", row.audience);
+      }
+    },
+    [runPlan, save],
+  );
+
   const runRebuild = async () => {
     if (!kit || !plan || !pickedChannels.length || !pickedFormats.length) return;
     setRebuilding(true);
@@ -404,6 +451,7 @@ export function Viewer() {
     if (cached?.status === "ready" && cached.kit) {
       setUrl(incoming);
       hydrateFrom(cached);
+      fillGaps(cached);
       return;
     }
 
@@ -412,7 +460,7 @@ export function Viewer() {
     // runExtract is recreated every render; the ref guard above is what makes
     // this run once, so depending on it would defeat the guard.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, cacheLoading, cached, hydrateFrom]);
+  }, [params, cacheLoading, cached, hydrateFrom, fillGaps]);
 
   const runGenerate = async (override?: { brief?: Brief }) => {
     const t = topic.trim();

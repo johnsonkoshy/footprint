@@ -25,6 +25,7 @@ import {
   type ExtractResponse,
 } from "@/lib/client";
 import { planBodyOf } from "@/lib/strategy/rebuild";
+import { STAGE_CENTS, useBrandCache, type CachedBrand } from "@/lib/cache";
 import { BrandStage } from "@/components/stages/BrandStage";
 import { FootprintStage } from "@/components/stages/FootprintStage";
 import { MarketStage } from "@/components/stages/MarketStage";
@@ -95,6 +96,12 @@ export function Viewer() {
   const [renderError, setRenderError] = useState<string | null>(null);
   const lastImg = useRef<string | null>(null);
 
+  /** Non-null once this run was served from the cache, for the banner. */
+  const [fromCache, setFromCache] = useState<CachedBrand | null>(null);
+  const { cached, loading: cacheLoading, save, start, forget, savePost } = useBrandCache(
+    params.get("url") ?? url,
+  );
+
   const [publish, setPublish] = useState<{ configured: boolean; name: string } | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState<string | null>(null);
@@ -136,6 +143,8 @@ export function Viewer() {
         );
       }
       setPhase("ready");
+      // Claim the run so the Convex effect below does not also act on it.
+      started.current = true;
     } catch {
       /* a corrupt cache is not worth a crash */
     }
@@ -207,19 +216,49 @@ export function Viewer() {
         setPickedFormats(res.plan.contentTypes.map((c) => c.name));
         setTopicIndex(0);
         setTopic(res.plan.contentTypes[0]?.topic ?? "");
+        save({ url: url.trim(), plan: res.plan, status: "ready", stage: undefined, addCents: STAGE_CENTS.plan });
       } catch (err) {
         setPlanError(String(err instanceof Error ? err.message : err));
       } finally {
         setPlanning(false);
       }
     },
-    [url],
+    [url, save],
   );
+
+  /** Everything a finished run produced, restored without a single API call. */
+  const hydrateFrom = useCallback((row: CachedBrand) => {
+    if (row.kit) setKit(row.kit);
+    if (row.signals) setSignals(row.signals);
+    if (row.text) setSiteText(row.text);
+    if (row.audience) setAudience(row.audience);
+    if (row.competitors) setCompetitors(row.competitors);
+    if (row.plan) {
+      setPlan(row.plan);
+      setPickedChannels(row.plan.channels.filter(isRecommended).map((c) => c.name));
+      setPickedFormats(row.plan.contentTypes.map((c) => c.name));
+      setChannel(row.plan.channels.find((c) => c.move === "start-here")?.name ?? "");
+      setTopic(row.plan.contentTypes[0]?.topic ?? "");
+      setTopicIndex(0);
+    }
+    setFromCache(row);
+    setPhase("ready");
+  }, []);
+
+  const runFresh = async () => {
+    const target = url.trim();
+    if (!target) return;
+    await forget(target);
+    setFromCache(null);
+    sessionStorage.removeItem(STORE_KEY);
+    runExtract(target);
+  };
 
   const runExtract = async (raw?: string) => {
     const target = (raw ?? url).trim();
     if (!target) return;
     setUrl(target);
+    setFromCache(null);
     setPhase("capturing");
     setElapsed(0);
     setError(null);
@@ -237,19 +276,31 @@ export function Viewer() {
     setPublished(null);
     setPinnedStep(null);
     try {
+      start(target);
       const { kit: k, ...rest } = await extractStream(target, (c) => {
         setCapture(c);
         setSignals(c.signals);
         setPhase("auditing");
+        save({ url: target, stage: "analyzing" });
       });
       setKit(k);
       setMeta(rest);
       setSiteText(rest.text);
       setPhase("ready");
+      save({
+        url: target,
+        kit: k,
+        signals: rest.signals,
+        text: rest.text,
+        stage: "researching",
+        addCents: STAGE_CENTS.extract,
+      });
       runMarket(k, rest.signals, rest.text);
     } catch (err) {
-      setError(String(err instanceof Error ? err.message : err));
+      const message = String(err instanceof Error ? err.message : err);
+      setError(message);
       setPhase("failed");
+      save({ url: target, status: "failed", error: message.slice(0, 500) });
     }
   };
 
@@ -270,19 +321,23 @@ export function Viewer() {
       readAudience(k, s, text)
         .then((res) => {
           setAudience(res.audience);
+          save({ url: url.trim(), audience: res.audience, addCents: STAGE_CENTS.audience });
           runPlan(k, s, "", res.audience);
         })
         .catch(() => runPlan(k, s, "", null))
         .finally(() => setAudienceWorking(false));
 
       findCompetitors(k, text)
-        .then((res) => setCompetitors(res.data))
+        .then((res) => {
+          setCompetitors(res.data);
+          save({ url: url.trim(), competitors: res.data, addCents: STAGE_CENTS.competitors });
+        })
         .catch((err) =>
           setCompetitors({ competitors: [], note: `Couldn't research the field. ${String(err instanceof Error ? err.message : err)}` }),
         )
         .finally(() => setCompetitorsWorking(false));
     },
-    [runPlan],
+    [runPlan, save, url],
   );
 
   const runRebuild = async () => {
@@ -308,6 +363,7 @@ export function Viewer() {
       setChannel(next.channels[0]?.name ?? "");
       setTopicIndex(0);
       setTopic(next.contentTypes[0]?.topic ?? "");
+      save({ url: url.trim(), plan: next });
     } catch (err) {
       setPlanError(String(err instanceof Error ? err.message : err));
     } finally {
@@ -322,7 +378,13 @@ export function Viewer() {
   useEffect(() => {
     const incoming = params.get("url");
     if (!incoming || started.current) return;
+
+    // Convex has not answered yet. Starting now would extract over a warm
+    // cache and pay for it, so wait for a hit or a confirmed miss.
+    if (cacheLoading) return;
+
     started.current = true;
+
     // `kit` is still null in this closure even when the restore effect above
     // just set it - both effects run in the same commit. Ask storage instead,
     // or a refresh silently pays for the whole extraction again.
@@ -332,15 +394,25 @@ export function Viewer() {
     } catch {
       /* unreadable cache just means we extract, which is the safe direction */
     }
-    // Kicking off the run is the whole job of this effect, and runExtract sets
-    // phase synchronously so the loading state paints on the first frame. The
-    // cascade the rule guards against is the point here, once, on mount.
-    /* eslint-disable-next-line react-hooks/set-state-in-effect */
+
+    // Starting the run - from cache or from scratch - is the whole job of this
+    // effect, and both paths set state synchronously so the first frame paints
+    // the right thing. The cascade the rule guards against is the point here.
+    /* eslint-disable react-hooks/set-state-in-effect */
+
+    // A finished run for this URL: hand it back instead of buying it again.
+    if (cached?.status === "ready" && cached.kit) {
+      setUrl(incoming);
+      hydrateFrom(cached);
+      return;
+    }
+
     runExtract(incoming);
+    /* eslint-enable react-hooks/set-state-in-effect */
     // runExtract is recreated every render; the ref guard above is what makes
     // this run once, so depending on it would defeat the guard.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
+  }, [params, cacheLoading, cached, hydrateFrom]);
 
   const runGenerate = async (override?: { brief?: Brief }) => {
     const t = topic.trim();
@@ -348,7 +420,10 @@ export function Viewer() {
     setGenerating(true);
     setRenderError(null);
     try {
-      setContent(await generate(kit, t, override?.brief ?? brief));
+      const made = await generate(kit, t, override?.brief ?? brief);
+      setContent(made);
+      const b = override?.brief ?? brief;
+      savePost({ url: url.trim(), topic: t, channel: b?.channel, format: b?.format, content: made, template });
     } catch (err) {
       setRenderError(String(err instanceof Error ? err.message : err));
     } finally {
@@ -440,7 +515,13 @@ export function Viewer() {
    */
   const effectiveChannel = pickedChannels.includes(channel) ? channel : (pickedChannels[0] ?? "");
 
-  const canvasMode = imgUrl || content ? "post" : capture?.screenshot ? "screenshot" : "empty";
+  const canvasMode = imgUrl || content
+    ? "post"
+    : capture?.screenshot
+      ? "screenshot"
+      : kit
+        ? "brand"
+        : "empty";
 
   const furthest = content ? 3 : plan ? 2 : audience ? 1 : 0;
   const ready = [Boolean(kit), Boolean(audience), Boolean(plan), Boolean(content)];
@@ -529,6 +610,18 @@ export function Viewer() {
       <main className="mx-auto grid min-h-0 w-full max-w-[1500px] flex-1 grid-cols-1 gap-8 px-6 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* min-h-0 is what lets this column scroll instead of stretching the page. */}
         <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+          {fromCache ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
+              <span>
+                Loaded from cache — no API calls, saved about{" "}
+                {Math.round(fromCache.cents ?? 17)}¢ and two minutes.
+              </span>
+              <button onClick={runFresh} className="font-medium underline underline-offset-2">
+                Run it fresh
+              </button>
+            </div>
+          ) : null}
+
           {step === 0 ? (
             <BrandStage
               status={brandStatus}
@@ -620,6 +713,7 @@ export function Viewer() {
         <div className="flex min-h-0 flex-col">
           <Canvas
             mode={canvasMode}
+            kit={kit}
             url={capture?.url ?? url}
             screenshot={capture?.screenshot ?? null}
             imgUrl={imgUrl}

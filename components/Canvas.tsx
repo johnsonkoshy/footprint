@@ -1,6 +1,6 @@
 "use client";
 
-import type { TemplateId } from "@/types";
+import type { BrandKit, TemplateId } from "@/types";
 
 /**
  * The right-hand pane. It always shows the brand as it currently exists:
@@ -9,6 +9,7 @@ import type { TemplateId } from "@/types";
  */
 export function Canvas({
   mode,
+  kit,
   url,
   screenshot,
   imgUrl,
@@ -17,7 +18,8 @@ export function Canvas({
   template,
   onTemplate,
 }: {
-  mode: "empty" | "screenshot" | "post";
+  mode: "empty" | "brand" | "screenshot" | "post";
+  kit: BrandKit | null;
   url: string;
   screenshot: string | null;
   imgUrl: string | null;
@@ -42,6 +44,48 @@ export function Canvas({
               Same topic, two brands. This is what we make. Paste yours.
             </p>
           </div>
+        ) : null}
+
+        {/*
+          A cache hit has no screenshot to show but does have a brand, and the
+          "paste yours" pitch would be nonsense next to it. Show what we read.
+        */}
+        {mode === "brand" && kit ? (
+          <figure className="flex max-h-full w-full max-w-[440px] flex-col items-center gap-4">
+            <div
+              className="flex w-full flex-col items-center justify-center gap-4 rounded-xl p-10 shadow-lg ring-1 ring-black/5"
+              style={{ backgroundColor: kit.palette.surface }}
+            >
+              {kit.logo ? (
+                <span
+                  className="flex items-center justify-center rounded-lg px-5 py-3"
+                  style={{ backgroundColor: kit.logo.background }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={kit.logo.dataUri} alt={`${kit.name} logo`} className="max-h-12 w-auto" />
+                </span>
+              ) : (
+                <span className="text-3xl font-semibold tracking-tight" style={{ color: kit.palette.ink }}>
+                  {kit.name}
+                </span>
+              )}
+              <p className="text-center text-sm" style={{ color: kit.palette.ink }}>
+                {kit.tagline}
+              </p>
+              <div className="flex gap-2">
+                {[kit.palette.primary, kit.palette.ink, kit.palette.accent].map((c) => (
+                  <span
+                    key={c}
+                    className="h-8 w-8 rounded-full ring-1 ring-inset ring-black/10"
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+            <figcaption className="text-sm text-zinc-500">
+              Read from {url}. Choose a post and this becomes the artwork.
+            </figcaption>
+          </figure>
         ) : null}
 
         {mode === "screenshot" && screenshot ? (

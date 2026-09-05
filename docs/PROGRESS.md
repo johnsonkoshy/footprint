@@ -56,9 +56,9 @@ Instagram documentary video and an X changelog note are not the same post.
 ## The two blockers, and exactly what they block
 
 - [x] ~~`ANTHROPIC_API_KEY`~~ - set, both gates run and passed.
-- [ ] **`npx convex dev`** - browser OAuth, so it has to be you. Schema and
-      functions are written in `convex/`. The viewer currently persists to
-      `sessionStorage` instead, so a refresh doesn't lose 40 seconds of work.
+- [x] ~~`npx convex dev`~~ - done. Deployment `wandering-tiger-755`, caching live.
+      `sessionStorage` stays as the same-tab fast path; Convex is the one that
+      survives a new tab, a new browser, and a different machine.
 
 Optional: `BLUESKY_IDENTIFIER` + `BLUESKY_APP_PASSWORD` for Step 7. The publish
 button only appears once the server sees both.
@@ -177,6 +177,59 @@ generation. About **5.5 cents per brand**, end to end. Override either with
 back rather than 404-ing every request.
 
 Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
+
+---
+
+## Convex, as a cache
+
+Deployment: `wandering-tiger-755` (project `footprint`). The CLI needed its own
+device grant - being signed into convex.dev in a browser is not the same thing -
+via `npx convex login --no-open --login-flow poll`, which prints a code instead
+of demanding a paste.
+
+**One row per company, keyed by normalised URL.** The URL is the identity, so
+there is nothing else to key on and nothing user-specific to protect. A cold run
+costs about 17 cents and two minutes; the same URL a second time now costs
+nothing and lands in about six seconds. Measured on tartinebakery.com: cache hit
+restored kit, signals, copy, audience and plan, skipped straight to the Plan
+step, and made zero API calls.
+
+Writes happen **from the browser as each stage resolves**, not from the API
+routes. Two reasons: there is no auth in this product so there are no server
+credentials to thread through, and a run abandoned halfway still leaves every
+stage it did finish in the cache. Each write is fire-and-forget so a cache
+failure can never break the run that produced the data - but it is logged, not
+swallowed, which matters (below).
+
+The research fields are `v.any()` on purpose. Every one is already validated by
+a zod schema at the API boundary, and mirroring those shapes in Convex
+validators would be a second copy of the contract to keep in sync for no added
+safety.
+
+### The screenshot does not go in
+
+A stripe.com capture is **828KB** as a data URI - five times what I estimated,
+and most of Convex's 1MB document cap for a field the cache-hit path never
+renders, because a hit skips straight past "reading it now". Dropping it takes
+the row from ~850KB to ~25KB.
+
+This was worth catching for a second reason: the write was fire-and-forget with
+a silent `catch`, so a document-too-large rejection would have shown up as a
+cache that simply never hit, with nothing in the console. Failures are logged
+now.
+
+A cache hit therefore has a brand but no screenshot, and the canvas used to show
+the "paste yours" fixture pitch beside it, which reads as nonsense next to a
+brand we clearly already have. There is a `brand` canvas mode now: the logo on
+their own surface colour with their palette.
+
+### Migrating a cache is deleting it
+
+Removing `screenshot` from the schema was rejected because the existing row
+still had the field. For a cache the answer is not a migration - the data is
+rebuildable - so the fix was a throwaway `clearAll` mutation, run once, then
+removed. Worth remembering that the live browser tab keeps writing while you do
+this: the first attempt failed again because a run finished mid-migration.
 
 ---
 

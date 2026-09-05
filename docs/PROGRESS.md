@@ -94,7 +94,8 @@ lib/extract/fonts.ts            proprietary family -> class -> Google Font
 lib/extract/index.ts            the audit prompt + parse/validate/retry/fallback
 lib/strategy/signals.ts         measured footprint: socials, surfaces, martech, probes
 lib/strategy/index.ts           the strategist prompt + the same safety loop
-components/PlanPanel.tsx        the plan, and the approval gate
+components/stages/              Stage shell + Brand, Footprint, Plan, Post cards
+components/Canvas.tsx           the sticky right pane: fixtures -> screenshot -> post
 lib/generate/index.ts           voice-enforcing prompt + the same safety loop
 lib/render/contrast.ts          WCAG luminance, ratio, ensureContrast
 lib/render/theme.ts             all colour maths, so templates stay literal-free
@@ -171,6 +172,43 @@ generation. About **5.5 cents per brand**, end to end. Override either with
 back rather than 404-ing every request.
 
 Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
+
+---
+
+## The viewer, redesigned
+
+The first viewer grew one stage at a time and it showed: a linear process -
+read, audit, plan, choose, write - laid out spatially as two columns and a
+Plan/Post tab. Rebuilt around three principles.
+
+**Story on the left, artifact on the right.** The left column is four stage
+cards top to bottom: Brand, Footprint, Plan, Post. Pending ones are dimmed and
+dashed, the working one carries a live clock, done ones are plain, so the state
+of the process is legible without a spinner. The right column is one sticky
+canvas that always shows the brand as it currently exists: what we make (the
+Stripe/Notion fixture pair, zero API calls) -> their homepage -> their post.
+
+**Show what you have the moment you have it.** `/api/extract?stream=1` returns
+NDJSON: a `capture` line the instant the page is photographed, then the
+`result`. Measured on linear.app: screenshot, logo and evidence at **6.0s**,
+kit at 16.9s. The screenshot goes on the canvas at 6s in a browser frame; the
+Footprint card fills its evidence chips at the same moment, a full minute
+before the model's verdict arrives to sit above them. The user reads while the
+plan writes.
+
+**Decisions first, rationale folded.** The Plan card leads with one sentence -
+"Start on Instagram, 3x/week · then Email, Facebook · skip TikTok" - with the
+channel names as clickable picks, then three brief cards, then one button:
+"Write this post for Instagram". Choosing the brief and pressing the button is
+the approval. Experiments, KPIs and the quarter live under "Why this plan".
+"Change the plan" reveals the constraint field and re-runs.
+
+Cut: the Plan/Post tabs, the word "Approve", the Present button. Kept: /compare
+as its own page, linked from the top bar - folding it into the canvas is the
+next step, not this one.
+
+Copy follows sentence case, verb-first buttons, no exclamation marks. The chrome
+is grey on purpose so the extracted brand is the only colour on screen.
 
 ---
 

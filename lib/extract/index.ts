@@ -167,7 +167,16 @@ export type ExtractionResult = {
 
 export async function extractBrandKit(
   rawUrl: string,
-  opts: { onStage?: (stage: string) => void; browser?: Parameters<typeof fetchSite>[1] } = {},
+  opts: {
+    onStage?: (stage: string) => void;
+    /**
+     * Fires the moment the page has been photographed, 15+ seconds before the
+     * audit returns. The streaming route uses it to put the screenshot on
+     * screen while the model is still looking at it.
+     */
+    onCapture?: (site: SiteCapture, signals: SiteSignals) => void;
+    browser?: Parameters<typeof fetchSite>[1];
+  } = {},
 ): Promise<ExtractionResult> {
   const notes: string[] = [];
 
@@ -178,6 +187,7 @@ export async function extractBrandKit(
   // Free: derived from the page we just loaded, no extra requests. The audit
   // stage adds HTTP probes on top of this only when the user asks for a plan.
   const signals = signalsFromPage(rawUrl, site.raw, Boolean(site.ogImage));
+  opts.onCapture?.(site, signals);
   if (site.logo) {
     notes.push(`logo captured via ${site.logo.how} (${site.logo.width}x${site.logo.height})`);
   } else if (site.logoNote) {

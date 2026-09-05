@@ -23,6 +23,64 @@ export async function extract(url: string): Promise<ExtractResponse> {
   return json;
 }
 
+export type CaptureEvent = {
+  url: string;
+  title: string;
+  /** data URI, or null when the site bounced headless Chrome */
+  screenshot: string | null;
+  logo: BrandKit["logo"];
+  signals: SiteSignals;
+  degraded: boolean;
+  ms: number;
+};
+
+/**
+ * Same call as extract(), but the screenshot arrives as soon as it exists.
+ * Resolves with the finished kit; rejects on a transport or server error.
+ */
+export async function extractStream(
+  url: string,
+  onCapture: (capture: CaptureEvent) => void,
+): Promise<ExtractResponse> {
+  const res = await fetch("/api/extract?stream=1", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok || !res.body) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.error ?? `Extraction failed (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: ExtractResponse | null = null;
+
+  const handle = (line: string) => {
+    if (!line.trim()) return;
+    const msg = JSON.parse(line);
+    if (msg.type === "capture") onCapture(msg);
+    else if (msg.type === "result") result = msg;
+    else if (msg.type === "error") throw new Error(msg.error);
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      handle(buffer.slice(0, nl));
+      buffer = buffer.slice(nl + 1);
+    }
+  }
+  handle(buffer);
+
+  if (!result) throw new Error("Extraction ended without a result");
+  return result;
+}
+
 export type Brief = { channel?: string; format?: string; cadence?: string };
 
 export async function generate(

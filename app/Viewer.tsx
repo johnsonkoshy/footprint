@@ -1,21 +1,32 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrandKit, ContentSet, MarketingPlan, SiteSignals, TemplateId } from "@/types";
 import {
-  extract,
+  extractStream,
   generate,
-  planStageFor,
   renderPng,
-  stageFor,
   strategize,
   type Brief,
+  type CaptureEvent,
   type ExtractResponse,
 } from "@/lib/client";
-import { KitPanel } from "@/components/KitPanel";
-import { PlanPanel } from "@/components/PlanPanel";
+import { BrandStage } from "@/components/stages/BrandStage";
+import { FootprintStage } from "@/components/stages/FootprintStage";
+import { PlanStage } from "@/components/stages/PlanStage";
+import { PostStage } from "@/components/stages/PostStage";
+import { Canvas } from "@/components/Canvas";
+import type { StageStatus } from "@/components/stages/Stage";
 
-type Phase = "idle" | "extracting" | "ready" | "failed";
+/**
+ * Story on the left, artifact on the right. The left column is the process
+ * unfolding top to bottom - Brand, Footprint, Plan, Post - and each card shows
+ * what it has the moment it has it. The right column is one canvas that
+ * evolves: what we make, then their homepage, then their post.
+ */
+
+type Phase = "idle" | "capturing" | "auditing" | "ready" | "failed";
 const STORE_KEY = "footprint:viewer";
 
 export function Viewer() {
@@ -23,11 +34,12 @@ export function Viewer() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [meta, setMeta] = useState<Omit<ExtractResponse, "kit"> | null>(null);
-  const [kit, setKit] = useState<BrandKit | null>(null);
 
-  // The plan stage: audit their existing footprint, propose a strategy, and
-  // wait for the user to approve it before anything gets written.
+  // What the page gave us at ~6s, before the model has said anything.
+  const [capture, setCapture] = useState<CaptureEvent | null>(null);
+  const [kit, setKit] = useState<BrandKit | null>(null);
+  const [meta, setMeta] = useState<Omit<ExtractResponse, "kit"> | null>(null);
+
   const [signals, setSignals] = useState<SiteSignals | null>(null);
   const [plan, setPlan] = useState<MarketingPlan | null>(null);
   const [planning, setPlanning] = useState(false);
@@ -37,53 +49,47 @@ export function Viewer() {
   const [goal, setGoal] = useState("");
   const [channel, setChannel] = useState("");
   const [topicIndex, setTopicIndex] = useState(0);
-  const [confirmed, setConfirmed] = useState(false);
-  const [tab, setTab] = useState<"plan" | "post">("plan");
+  const [topic, setTopic] = useState("");
   const [brief, setBrief] = useState<Brief | undefined>(undefined);
 
-  const [topic, setTopic] = useState("announcing a new integrations marketplace");
   const [content, setContent] = useState<ContentSet | null>(null);
   const [generating, setGenerating] = useState(false);
   const [template, setTemplate] = useState<TemplateId>("statement");
-
-  const [publish, setPublish] = useState<{ configured: boolean; name: string } | null>(null);
-  const [publishing, setPublishing] = useState(false);
-  const [published, setPublished] = useState<string | null>(null);
 
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const lastImg = useRef<string | null>(null);
 
-  // Convex is the intended store (convex/kits.ts is written and waiting on a
-  // login). Until then sessionStorage keeps a refresh from losing 40s of work.
+  const [publish, setPublish] = useState<{ configured: boolean; name: string } | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState<string | null>(null);
+
+  const planRef = useRef<HTMLDivElement>(null);
+  const postRef = useRef<HTMLDivElement>(null);
+
+  // ---------- persistence: a refresh must not cost a minute ----------
   useEffect(() => {
-    // Rehydrating from browser storage has to happen after mount - the server
-    // has no sessionStorage, so doing it during render breaks hydration.
     /* eslint-disable react-hooks/set-state-in-effect */
     try {
       const saved = sessionStorage.getItem(STORE_KEY);
       if (!saved) return;
       const s = JSON.parse(saved);
-      if (s.kit) {
-        setKit(s.kit);
-        setMeta(s.meta ?? null);
-        setUrl(s.url ?? "");
-        setPhase("ready");
-      }
-      if (s.content) setContent(s.content);
-      if (s.topic) setTopic(s.topic);
-      if (s.template) setTemplate(s.template);
-      if (s.signals) setSignals(s.signals);
-      if (s.plan) setPlan(s.plan);
-      if (s.channel) setChannel(s.channel);
-      if (s.goal) setGoal(s.goal);
-      if (s.brief) setBrief(s.brief);
-      if (typeof s.topicIndex === "number") setTopicIndex(s.topicIndex);
-      if (s.confirmed) {
-        setConfirmed(true);
-        setTab("post");
-      }
+      if (!s.kit) return;
+      setKit(s.kit);
+      setMeta(s.meta ?? null);
+      setUrl(s.url ?? "");
+      setCapture(s.capture ?? null);
+      setSignals(s.signals ?? null);
+      setPlan(s.plan ?? null);
+      setChannel(s.channel ?? "");
+      setGoal(s.goal ?? "");
+      setBrief(s.brief ?? undefined);
+      setTopicIndex(typeof s.topicIndex === "number" ? s.topicIndex : 0);
+      setTopic(s.topic ?? "");
+      setContent(s.content ?? null);
+      setTemplate(s.template ?? "statement");
+      setPhase("ready");
     } catch {
       /* a corrupt cache is not worth a crash */
     }
@@ -95,15 +101,12 @@ export function Viewer() {
     try {
       sessionStorage.setItem(
         STORE_KEY,
-        JSON.stringify({
-          url, kit, meta, content, topic, template,
-          signals, plan, channel, goal, brief, topicIndex, confirmed,
-        }),
+        JSON.stringify({ url, kit, meta, capture, signals, plan, channel, goal, brief, topicIndex, topic, content, template }),
       );
     } catch {
       /* quota or private mode - state just won't survive a refresh */
     }
-  }, [url, kit, meta, content, topic, template, signals, plan, channel, goal, brief, topicIndex, confirmed]);
+  }, [url, kit, meta, capture, signals, plan, channel, goal, brief, topicIndex, topic, content, template]);
 
   useEffect(() => {
     fetch("/api/publish")
@@ -112,6 +115,15 @@ export function Viewer() {
       .catch(() => setPublish({ configured: false, name: "Bluesky" }));
   }, []);
 
+  // ---------- clocks ----------
+  const extracting = phase === "capturing" || phase === "auditing";
+  useEffect(() => {
+    if (!extracting) return;
+    const started = Date.now();
+    const id = setInterval(() => setElapsed((Date.now() - started) / 1000), 250);
+    return () => clearInterval(id);
+  }, [extracting]);
+
   useEffect(() => {
     if (!planning) return;
     const started = Date.now();
@@ -119,39 +131,7 @@ export function Viewer() {
     return () => clearInterval(id);
   }, [planning]);
 
-  useEffect(() => {
-    if (phase !== "extracting") return;
-    const started = Date.now();
-    const id = setInterval(() => setElapsed((Date.now() - started) / 1000), 250);
-    return () => clearInterval(id);
-  }, [phase]);
-
-  const runExtract = async () => {
-    if (!url.trim()) return;
-    setPhase("extracting");
-    setElapsed(0);
-    setError(null);
-    setContent(null);
-    setImgUrl(null);
-    setPlan(null);
-    setSignals(null);
-    setPlanError(null);
-    setConfirmed(false);
-    setTab("plan");
-    try {
-      const { kit: k, ...rest } = await extract(url.trim());
-      setKit(k);
-      setMeta(rest);
-      setPhase("ready");
-      // The plan takes longer than the extraction did, so start it now - the
-      // user reads the brand panel while it runs instead of waiting twice.
-      runPlan(k, rest.signals, "");
-    } catch (err) {
-      setError(String(err instanceof Error ? err.message : err));
-      setPhase("failed");
-    }
-  };
-
+  // ---------- the process ----------
   const runPlan = useCallback(
     async (k: BrandKit, s: SiteSignals | null, g: string) => {
       setPlanning(true);
@@ -164,37 +144,51 @@ export function Viewer() {
         setPlanNotes(res.usedFallback ? res.notes : []);
         setChannel(res.plan.channels.find((c) => c.move === "start-here")?.name ?? "");
         setTopicIndex(0);
-        setTopic(res.plan.contentTypes[0]?.topic ?? topic);
+        setTopic(res.plan.contentTypes[0]?.topic ?? "");
       } catch (err) {
         setPlanError(String(err instanceof Error ? err.message : err));
       } finally {
         setPlanning(false);
       }
     },
-    // `topic` is only read as a fallback when the plan has no content types.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [url],
   );
 
-  /** The gate the whole stage exists for: nothing is written until this runs. */
-  const confirmPlan = () => {
-    if (!plan) return;
-    const picked = plan.channels.find((c) => c.name === channel);
-    const next: Brief = {
-      channel: picked?.name,
-      format: plan.contentTypes[topicIndex]?.name,
-      cadence: picked?.cadence,
-    };
-    setBrief(next);
-    setConfirmed(true);
-    setTab("post");
-    runGenerate({ brief: next });
+  const runExtract = async () => {
+    if (!url.trim()) return;
+    setPhase("capturing");
+    setElapsed(0);
+    setError(null);
+    setCapture(null);
+    setKit(null);
+    setMeta(null);
+    setSignals(null);
+    setPlan(null);
+    setPlanError(null);
+    setBrief(undefined);
+    setContent(null);
+    setImgUrl(null);
+    setPublished(null);
+    try {
+      const { kit: k, ...rest } = await extractStream(url.trim(), (c) => {
+        setCapture(c);
+        setSignals(c.signals);
+        setPhase("auditing");
+      });
+      setKit(k);
+      setMeta(rest);
+      setPhase("ready");
+      // Longer than the extraction was, so start it now: the user reads the
+      // brand and the evidence while it runs instead of waiting twice.
+      runPlan(k, rest.signals, "");
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err));
+      setPhase("failed");
+    }
   };
 
-  // Overrides exist because confirming a plan writes immediately, and React
-  // state set in the same tick is not readable yet.
-  const runGenerate = async (override?: { topic?: string; brief?: Brief }) => {
-    const t = (override?.topic ?? topic).trim();
+  const runGenerate = async (override?: { brief?: Brief }) => {
+    const t = topic.trim();
     if (!kit || !t) return;
     setGenerating(true);
     setRenderError(null);
@@ -207,7 +201,16 @@ export function Viewer() {
     }
   };
 
-  // Re-render whenever the kit, the copy, or the template changes.
+  /** Choosing a brief and pressing the button is the approval. Nothing is written before this. */
+  const writePost = () => {
+    if (!plan) return;
+    const picked = plan.channels.find((c) => c.name === channel);
+    const next: Brief = { channel: picked?.name, format: plan.contentTypes[topicIndex]?.name, cadence: picked?.cadence };
+    setBrief(next);
+    runGenerate({ brief: next });
+    postRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const draw = useCallback(async () => {
     if (!kit || !content) return;
     setRendering(true);
@@ -225,9 +228,14 @@ export function Viewer() {
   }, [kit, content, template]);
 
   useEffect(() => {
-    const id = setTimeout(draw, 220); // debounce live edits
+    const id = setTimeout(draw, 220);
     return () => clearTimeout(id);
   }, [draw]);
+
+  // Bring the decision into view when it lands; the user was reading above it.
+  useEffect(() => {
+    if (plan && !content) planRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [plan, content]);
 
   const sendPost = async () => {
     if (!imgUrl || !content) return;
@@ -249,293 +257,171 @@ export function Viewer() {
     }
   };
 
+  // ---------- derived ----------
+  const brandStatus: StageStatus =
+    phase === "failed" ? "error" : extracting ? "working" : kit ? "done" : "pending";
+  const footprintStatus: StageStatus =
+    plan ? "done" : signals || extracting ? "working" : "pending";
+  const planStatus: StageStatus =
+    planError ? "error" : plan ? "done" : planning ? "working" : "pending";
+  const postStatus: StageStatus = content ? "done" : generating ? "working" : "pending";
+
+  const canvasMode = imgUrl || content ? "post" : capture?.screenshot ? "screenshot" : "empty";
+
+  const steps: { label: string; state: "done" | "now" | "todo" }[] = [
+    { label: "Brand", state: kit ? "done" : extracting ? "now" : "todo" },
+    { label: "Footprint", state: plan ? "done" : signals ? "now" : "todo" },
+    { label: "Plan", state: brief ? "done" : plan ? "now" : "todo" },
+    { label: "Post", state: imgUrl ? "done" : generating ? "now" : "todo" },
+  ];
+
   return (
-    <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 gap-10 p-8 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-      {/* ---------------- Left: the brand ---------------- */}
-      <section className="flex flex-col gap-6">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight">Footprint</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Paste a URL. We read their identity and write in their voice.
-          </p>
-        </header>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            runExtract();
-          }}
-          className="flex gap-2"
-        >
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="stripe.com"
-            className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
-          />
-          <button
-            type="submit"
-            disabled={phase === "extracting" || !url.trim()}
-            className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+    <div className="flex min-h-screen flex-col">
+      {/* ---------------- top bar ---------------- */}
+      <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[1400px] items-center gap-4 px-6 py-3">
+          <span className="shrink-0 text-sm font-semibold tracking-tight">Footprint</span>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              runExtract();
+            }}
+            className="flex min-w-0 flex-1 gap-2"
           >
-            {phase === "extracting" ? "Reading…" : "Extract"}
-          </button>
-        </form>
-
-        {phase === "extracting" ? (
-          <div className="rounded-lg border border-zinc-200 p-4">
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm font-medium">{stageFor(elapsed)}</span>
-              <span className="font-mono text-xs text-zinc-400">{elapsed.toFixed(0)}s</span>
-            </div>
-            <div className="mt-3 h-1 overflow-hidden rounded bg-zinc-100">
-              <div
-                className="h-full bg-zinc-900 transition-[width] duration-300"
-                style={{ width: `${Math.min(95, (elapsed / 35) * 100)}%` }}
-              />
-            </div>
-            <p className="mt-3 text-xs text-zinc-500">
-              Typically 20–40 seconds. We screenshot the homepage, read the copy, then audit both.
-            </p>
-          </div>
-        ) : null}
-
-        {phase === "failed" ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm">
-            <p className="font-medium text-red-800">Could not read that site</p>
-            <p className="mt-1 break-words text-red-700">{error}</p>
-            <button onClick={runExtract} className="mt-3 text-sm font-medium text-red-800 underline">
-              Try again
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="stripe.com"
+              className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm outline-none focus:border-zinc-900"
+              aria-label="Company URL"
+            />
+            <button
+              type="submit"
+              disabled={extracting || !url.trim()}
+              className="shrink-0 rounded-lg bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+            >
+              {extracting ? "Reading…" : "Read the brand"}
             </button>
-          </div>
-        ) : null}
+          </form>
+          <Link href="/compare" className="shrink-0 text-sm text-zinc-500 hover:text-zinc-900">
+            Compare two brands
+          </Link>
+        </div>
+      </header>
 
-        {phase === "idle" && !kit ? (
-          <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-sm text-zinc-500">
-            <p className="font-medium text-zinc-700">Nothing loaded yet</p>
-            <p className="mt-1">
+      <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 gap-8 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {/* ---------------- left: the story ---------------- */}
+        <div className="flex flex-col gap-4">
+          <ol className="flex items-center gap-2 text-xs">
+            {steps.map((s, i) => (
+              <li key={s.label} className="flex items-center gap-2">
+                {i > 0 ? <span className="text-zinc-300">—</span> : null}
+                <span
+                  className={
+                    s.state === "done"
+                      ? "text-zinc-900"
+                      : s.state === "now"
+                        ? "font-medium text-zinc-900"
+                        : "text-zinc-400"
+                  }
+                >
+                  {s.state === "done" ? "✓ " : null}
+                  {s.label}
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          {phase === "idle" && !kit ? (
+            <p className="text-sm text-zinc-500">
               Try{" "}
-              {["stripe.com", "notion.so", "craigslist.org"].map((u, i) => (
+              {["stripe.com", "tartinebakery.com", "craigslist.org"].map((u, i) => (
                 <span key={u}>
                   {i > 0 ? ", " : ""}
-                  <button onClick={() => setUrl(u)} className="underline hover:text-zinc-900">
+                  <button onClick={() => setUrl(u)} className="underline underline-offset-2 hover:text-zinc-900">
                     {u}
                   </button>
                 </span>
               ))}
               .
             </p>
-          </div>
-        ) : null}
+          ) : null}
 
-        {kit ? (
-          <>
-            {meta?.usedFallback ? (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-200">
-                Extraction fell back to a neutral kit. {meta.notes.join("; ")}
-              </p>
-            ) : meta?.degraded ? (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-200">
-                No screenshot — this site blocked our browser, so the palette is a guess.
-              </p>
-            ) : null}
-            <KitPanel kit={kit} fonts={meta?.fonts} onChange={setKit} />
-            <p className="text-xs text-zinc-400">Click any swatch to override it. The image redraws live.</p>
-          </>
-        ) : null}
-      </section>
-
-      {/* ---------------- Right: the plan, then the post ---------------- */}
-      <section className="flex flex-col gap-5">
-        {kit ? (
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex rounded-lg bg-zinc-100 p-0.5">
-              {(["plan", "post"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  disabled={t === "post" && !confirmed}
-                  className={`rounded-[6px] px-3 py-1.5 text-sm capitalize transition disabled:opacity-40 ${
-                    tab === t ? "bg-white font-medium shadow-sm" : "text-zinc-500"
-                  }`}
-                >
-                  {t === "plan" ? "Plan" : "Post"}
-                </button>
-              ))}
-            </div>
-            {confirmed && tab === "post" ? (
-              <p className="truncate text-xs text-zinc-400">
-                Writing {brief?.format ? `a ${brief.format.toLowerCase()}` : "a post"}
-                {brief?.channel ? ` for ${brief.channel}` : ""}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {tab === "plan" ? (
-          planning ? (
-            <div className="rounded-lg border border-zinc-200 p-4">
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-medium">{planStageFor(planElapsed)}</span>
-                <span className="font-mono text-xs text-zinc-400">{planElapsed.toFixed(0)}s</span>
-              </div>
-              <div className="mt-3 h-1 overflow-hidden rounded bg-zinc-100">
-                <div
-                  className="h-full bg-zinc-900 transition-[width] duration-300"
-                  style={{ width: `${Math.min(95, (planElapsed / 95) * 100)}%` }}
-                />
-              </div>
-              <p className="mt-3 text-xs text-zinc-500">
-                We probe their blog, changelog and social links, then audit what we found. Around
-                90 seconds — read the brand panel while it runs.
-              </p>
-            </div>
-          ) : planError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm">
-              <p className="font-medium text-red-800">Could not build a plan</p>
-              <p className="mt-1 break-words text-red-700">{planError}</p>
-              <button
-                onClick={() => kit && runPlan(kit, signals, goal)}
-                className="mt-3 text-sm font-medium text-red-800 underline"
-              >
-                Try again
-              </button>
-            </div>
-          ) : plan && signals ? (
-            <>
-              {planNotes.length ? (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-200">
-                  The plan fell back to a default. {planNotes.join("; ")}
-                </p>
-              ) : null}
-              <PlanPanel
-                plan={plan}
-                signals={signals}
-                goal={goal}
-                onGoalChange={setGoal}
-                onReplan={() => kit && runPlan(kit, signals, goal)}
-                replanning={planning}
-                channel={channel}
-                onChannelChange={setChannel}
-                topicIndex={topicIndex}
-                onTopicIndexChange={(i) => {
-                  setTopicIndex(i);
-                  setTopic(plan.contentTypes[i]?.topic ?? topic);
-                }}
-                topic={topic}
-                onTopicChange={setTopic}
-                onConfirm={confirmPlan}
-              />
-            </>
-          ) : (
-            <div className="flex min-h-[400px] items-center justify-center rounded-xl bg-zinc-50 p-6 text-center text-sm text-zinc-400 ring-1 ring-inset ring-zinc-200/70">
-              <p className="max-w-xs">
-                Extract a brand and we will audit the marketing they already have, then propose
-                what to do next.
-              </p>
-            </div>
-          )
-        ) : null}
-
-        {tab === "post" ? (
-        <>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            runGenerate();
-          }}
-          className="flex gap-2"
-        >
-          <input
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="What is the post about?"
-            className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+          <BrandStage
+            status={brandStatus}
+            elapsed={elapsed}
+            screenshot={capture?.screenshot ?? null}
+            siteTitle={capture?.title ?? null}
+            kit={kit}
+            fonts={meta?.fonts}
+            notes={
+              phase === "failed"
+                ? [error ?? ""]
+                : meta?.usedFallback
+                  ? ["Extraction fell back to a neutral kit.", ...meta.notes]
+                  : meta?.degraded
+                    ? ["This site blocked our browser, so the palette is a guess."]
+                    : []
+            }
+            onChange={setKit}
           />
-          <button
-            type="submit"
-            disabled={!kit || generating || !topic.trim()}
-            className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-          >
-            {generating ? "Writing…" : "Generate"}
-          </button>
-        </form>
 
-        {content ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex rounded-lg bg-zinc-100 p-0.5">
-              {(["statement", "split"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTemplate(t)}
-                  className={`rounded-[6px] px-3 py-1.5 text-sm capitalize transition ${
-                    template === t ? "bg-white shadow-sm font-medium" : "text-zinc-500"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <input
-              value={content.hook}
-              onChange={(e) => setContent({ ...content, hook: e.target.value })}
-              className="min-w-0 flex-1 rounded-lg border border-transparent bg-zinc-50 px-3 py-2 text-sm hover:border-zinc-300 focus:border-zinc-900 focus:bg-white focus:outline-none"
-              aria-label="Headline"
+          <FootprintStage status={footprintStatus} signals={signals} plan={plan} />
+
+          <div ref={planRef}>
+            <PlanStage
+              status={planStatus}
+              elapsed={planElapsed}
+              plan={plan}
+              notes={planNotes}
+              error={planError}
+              channel={channel}
+              onChannelChange={setChannel}
+              topicIndex={topicIndex}
+              onTopicIndexChange={(i) => {
+                setTopicIndex(i);
+                setTopic(plan?.contentTypes[i]?.topic ?? "");
+              }}
+              topic={topic}
+              onTopicChange={setTopic}
+              goal={goal}
+              onGoalChange={setGoal}
+              onReplan={() => kit && runPlan(kit, signals, goal)}
+              onWrite={writePost}
+              writing={generating}
+              onRetry={() => kit && runPlan(kit, signals, goal)}
             />
-            {rendering ? <span className="text-xs text-zinc-400">rendering…</span> : null}
           </div>
-        ) : null}
 
-        <div className="flex min-h-[540px] items-start justify-center rounded-xl bg-zinc-50 p-6 ring-1 ring-inset ring-zinc-200/70">
-          {renderError ? (
-            <p className="max-w-md self-center text-center text-sm text-red-700">{renderError}</p>
-          ) : imgUrl ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={imgUrl}
-              alt="Rendered post"
-              className="max-h-[76vh] w-auto rounded-lg shadow-xl ring-1 ring-black/5"
+          <div ref={postRef}>
+            <PostStage
+              status={postStatus}
+              brief={brief}
+              content={content}
+              onContentChange={setContent}
+              publish={publish}
+              onPublish={sendPost}
+              publishing={publishing}
+              published={published}
+              error={renderError}
             />
-          ) : (
-            <p className="max-w-xs self-center text-center text-sm text-zinc-400">
-              {kit
-                ? "Enter a topic and hit Generate."
-                : "Extract a brand first, then write a post in their voice."}
-            </p>
-          )}
+          </div>
         </div>
 
-        {content ? (
-          <div className="rounded-lg border border-zinc-200 p-4 text-sm">
-            <p className="text-zinc-700">{content.caption}</p>
-            <p className="mt-2 text-zinc-400">{content.hashtags.map((h) => `#${h}`).join(" ")}</p>
-
-            {publish?.configured && imgUrl ? (
-              <div className="mt-4 flex items-center gap-3 border-t border-zinc-100 pt-3">
-                <button
-                  onClick={sendPost}
-                  disabled={publishing}
-                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
-                >
-                  {publishing ? "Posting…" : `Post to ${publish.name}`}
-                </button>
-                {published ? (
-                  <a
-                    href={published}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate text-sm text-green-700 underline"
-                  >
-                    {published}
-                  </a>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        </>
-        ) : null}
-      </section>
-    </main>
+        {/* ---------------- right: the artifact ---------------- */}
+        <div className="lg:sticky lg:top-[60px] lg:self-start">
+          <Canvas
+            mode={canvasMode}
+            url={capture?.url ?? url}
+            screenshot={capture?.screenshot ?? null}
+            imgUrl={imgUrl}
+            rendering={rendering}
+            renderError={renderError}
+            template={template}
+            onTemplate={setTemplate}
+          />
+        </div>
+      </main>
+    </div>
   );
 }

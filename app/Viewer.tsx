@@ -21,6 +21,10 @@ export function Viewer() {
   const [generating, setGenerating] = useState(false);
   const [template, setTemplate] = useState<TemplateId>("statement");
 
+  const [publish, setPublish] = useState<{ configured: boolean; name: string } | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState<string | null>(null);
+
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -59,6 +63,13 @@ export function Viewer() {
       /* quota or private mode - state just won't survive a refresh */
     }
   }, [url, kit, meta, content, topic, template]);
+
+  useEffect(() => {
+    fetch("/api/publish")
+      .then((r) => r.json())
+      .then(setPublish)
+      .catch(() => setPublish({ configured: false, name: "Bluesky" }));
+  }, []);
 
   useEffect(() => {
     if (phase !== "extracting") return;
@@ -118,6 +129,26 @@ export function Viewer() {
     const id = setTimeout(draw, 220); // debounce live edits
     return () => clearTimeout(id);
   }, [draw]);
+
+  const sendPost = async () => {
+    if (!imgUrl || !content) return;
+    setPublishing(true);
+    setRenderError(null);
+    try {
+      const blob = await fetch(imgUrl).then((r) => r.blob());
+      const form = new FormData();
+      form.append("image", blob, "post.png");
+      form.append("text", content.caption || content.hook);
+      const res = await fetch("/api/publish", { method: "POST", body: form });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setPublished(json.url);
+    } catch (err) {
+      setRenderError(String(err instanceof Error ? err.message : err));
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   return (
     <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 gap-10 p-8 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
@@ -287,6 +318,28 @@ export function Viewer() {
           <div className="rounded-lg border border-zinc-200 p-4 text-sm">
             <p className="text-zinc-700">{content.caption}</p>
             <p className="mt-2 text-zinc-400">{content.hashtags.map((h) => `#${h}`).join(" ")}</p>
+
+            {publish?.configured && imgUrl ? (
+              <div className="mt-4 flex items-center gap-3 border-t border-zinc-100 pt-3">
+                <button
+                  onClick={sendPost}
+                  disabled={publishing}
+                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+                >
+                  {publishing ? "Posting…" : `Post to ${publish.name}`}
+                </button>
+                {published ? (
+                  <a
+                    href={published}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate text-sm text-green-700 underline"
+                  >
+                    {published}
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>

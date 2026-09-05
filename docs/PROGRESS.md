@@ -1,10 +1,9 @@
 # Footprint - Build Tracker
 
-Source of truth for where we are. Updated at the end of every stage.
-Prompt pack: `docs/footprint-claude-code-prompts.md`
+Source of truth for where we are. Prompt pack: `docs/footprint-claude-code-prompts.md`
 
 **North star:** two URLs + one topic -> two visibly different, obviously
-on-brand rendered images, side by side.
+on-brand rendered images, side by side. **This works today** (see `/compare`).
 
 ---
 
@@ -12,38 +11,79 @@ on-brand rendered images, side by side.
 
 | # | Stage | State | Gate |
 |---|---|---|---|
-| 0 | CLAUDE.md | DONE | Exists at repo root, verbatim from the pack |
-| 1 | Scaffold + types | DONE* | `npm run dev` serves; *Convex not connected yet |
-| 2 | Extraction (URL -> BrandKit) | CODE DONE, UNGATED | 8 of 10 test URLs give a usable kit - **needs ANTHROPIC_API_KEY to run** |
-| 3 | Generation (BrandKit + topic -> ContentSet) | NOT STARTED | Stripe vs Notion read as different companies |
-| 4 | Rendering (Satori -> PNG) | NOT STARTED | Would you actually post the image? |
-| 5 | Viewer (`/`) | NOT STARTED | Full URL-to-image flow works in browser |
-| 6 | Compare mode (`/compare`) | NOT STARTED | Two brands side by side on a projector |
-| 7 | Bluesky publish | STRETCH | Only if 1-6 are done |
+| 0 | CLAUDE.md | DONE | Verbatim from the pack |
+| 1 | Scaffold + types | DONE | `npm run dev` and `npm run build` both pass |
+| 2 | Extraction | CODE DONE, **UNGATED** | 8/10 test URLs give a usable kit - **needs API key** |
+| 3 | Generation | CODE DONE, **UNGATED** | Stripe vs Notion read as different companies - **needs API key** |
+| 4 | Rendering | DONE, verified | Judged four rendered PNGs. Yes, postable |
+| 5 | Viewer (`/`) | DONE | Empty, loading, fallback and ready states all seen working |
+| 6 | Compare (`/compare`) | DONE, verified | Two brands side by side, screenshotted |
+| 7 | Bluesky publish | CODE DONE, unrun | Needs app-password env vars. **Nothing has been posted** |
+
+Everything the API key blocks is written and typechecked; it has just never
+made a real call. Everything else has been run and looked at.
 
 ---
 
-## What exists now
+## The two blockers, and exactly what they block
+
+- [ ] **`ANTHROPIC_API_KEY` in `.env.local`** - blocks the Step 2 and Step 3
+      gates. Without it `/api/extract` returns a neutral fallback kit after
+      ~5s (capture succeeds, the model call fails twice, fallback serves).
+      The UI shows an amber warning when this happens, which is how we know
+      the failure path works.
+- [ ] **`npx convex dev`** - browser OAuth, so it has to be you. Schema and
+      functions are written in `convex/`. The viewer currently persists to
+      `sessionStorage` instead, so a refresh doesn't lose 40 seconds of work.
+
+Optional: `BLUESKY_IDENTIFIER` + `BLUESKY_APP_PASSWORD` for Step 7. The publish
+button only appears once the server sees both.
+
+---
+
+## Verify it yourself
 
 ```
-CLAUDE.md                       governing doc, do not drift from it
+npm run dev
+```
+
+- `/compare` -> **Instant pair** renders Stripe vs Notion with zero API calls.
+- `/api/render?fixture=notion&template=split` -> a PNG in the browser.
+  Fixtures: stripe, linear, notion, craigslist. Templates: statement, split.
+
+Once the key is in:
+
+```
+node scripts/test-extract.mjs http://localhost:PORT     # Step 2 gate, table + voice samples
+node scripts/test-generate.mjs http://localhost:PORT    # Step 3 gate, Stripe vs Notion
+```
+
+---
+
+## What exists
+
+```
+CLAUDE.md                       governing doc
+types/index.ts                  BrandKit + ContentSet, zod schemas, fallbacks
 lib/extract/fetchSite.ts        Playwright capture + text-only fallback, never throws
 lib/extract/fonts.ts            proprietary family -> class -> Google Font
 lib/extract/index.ts            the audit prompt + parse/validate/retry/fallback
-app/api/extract/route.ts        POST { url } -> BrandKit
-scripts/test-extract.mjs        runs the 10 test URLs, prints the table + voice samples
-types/index.ts                  BrandKit + ContentSet, zod schemas, fallbacks
-convex/schema.ts                kits + posts tables, by_url index
-convex/kits.ts                  getByUrl / get / start / setStage
-app/layout.tsx                  wraps children in ConvexClientProvider
-app/ConvexClientProvider.tsx    no-ops cleanly when Convex isn't provisioned
-app/page.tsx                    placeholder, becomes the viewer at Step 5
-lib/extract  lib/generate  lib/render  components/templates   (empty, staged)
-.env.local.example              ANTHROPIC_API_KEY, NEXT_PUBLIC_CONVEX_URL
-.claude/launch.json             dev server config, autoPort on
+lib/generate/index.ts           voice-enforcing prompt + the same safety loop
+lib/render/contrast.ts          WCAG luminance, ratio, ensureContrast
+lib/render/theme.ts             all colour maths, so templates stay literal-free
+lib/render/fonts.ts             Google TTF fetch for Satori, falls back to Inter
+lib/render/fixtures.ts          4 hand-written kits + content, for offline work
+lib/publish/index.ts            Publisher interface - the Instagram seam
+lib/publish/bluesky.ts          AT Protocol session -> uploadBlob -> createRecord
+lib/client.ts                   shared browser calls + the staged-progress table
+components/templates/           Statement, Split - zero hex literals, checked
+components/KitPanel.tsx         swatches with live colour override
+app/Viewer.tsx                  the single-page viewer
+app/compare/Compare.tsx         the demo
+app/api/{extract,generate,render,fixtures,publish}
+convex/schema.ts, convex/kits.ts, convex/tsconfig.json
+scripts/test-extract.mjs, scripts/test-generate.mjs
 ```
-
-Versions: Next 16.3.4, React 19.2.8, Tailwind 4, convex 1.45.0, zod 4.5.4.
 
 ---
 
@@ -51,44 +91,31 @@ Versions: Next 16.3.4, React 19.2.8, Tailwind 4, convex 1.45.0, zod 4.5.4.
 
 | When | Decision | Why |
 |---|---|---|
-| 0 | Build in `hackathon/marketing/`, pack moved to `docs/` | Scaffold needs a clean root; pack is reference, not source |
-| 1 | Use `next/og` for rendering, not a separate `satori` install | Next 16 bundles Satori. Zero new deps. Fall back to `satori` + `@resvg/resvg-js` only if Step 4 fights us |
-| 1 | Only new deps: `convex`, `zod` | Both named in the CLAUDE.md stack, so pre-approved under hard rule 4 |
-| 1 | Dev server on an auto-assigned port | Port 3000 is occupied by another project on this machine |
-| 1 | Convex provider no-ops without a URL | Lets `npm run dev` boot before Convex login, so Step 1 isn't blocked on it |
-| 2 | Local Playwright for screenshots | Johnson's call. Measured: 10/10 test URLs capture cleanly, no Cloudflare bounces |
-| 2 | Test harness hits the real `/api/extract` route, not a standalone script | Exercises the production path and avoids adding `tsx` as a dev dependency |
-| 2 | LLM gets a *loose* schema; strict `BrandKitSchema` validates the reply | Grammar-constrained decoding and regex don't always mix. The guarantee comes from validating, per hard rule 2 |
-| 2 | Kept `waitUntil: "load"` + 1.8s settle; rejected scroll-to-lazy-load | Measured: scrolling changed word counts 462->462, 130->130, 419->419 and made vercel.com 3x slower |
-| 2 | Local business test URL = `tartinebakery.com` | `swanoysterdepot.us` is now a domain-squatted gambling site; Tartine verified live at 427 words |
-| 2 | Model `claude-opus-5` via `messages.parse` + `zodOutputFormat` | Vision + structured output in one call, adaptive thinking on by default |
+| 0 | Build in `hackathon/marketing/`, pack moved to `docs/` | Scaffold needs a clean root |
+| 1 | `next/og` for rendering, no separate `satori` install | Next 16 bundles Satori. Zero new deps |
+| 1 | Convex provider no-ops without a URL | Lets `npm run dev` boot before Convex login |
+| 2 | Local Playwright | Measured: 10/10 test URLs capture, no Cloudflare bounces |
+| 2 | Harness hits the real API route, not a standalone script | Exercises production path, avoids a `tsx` dep |
+| 2 | LLM gets a loose schema; strict `BrandKitSchema` validates the reply | Grammar-constrained decoding and regex don't reliably mix |
+| 2 | Kept `waitUntil: "load"`; **rejected** scroll-to-lazy-load | Measured: word counts unchanged (462->462, 130->130), vercel 3x slower |
+| 2 | Local business URL = `tartinebakery.com` | `swanoysterdepot.us` is now a domain-squatted gambling site |
+| 2,3 | `claude-opus-5` via `messages.parse` + `zodOutputFormat` | Vision + structured output in one call |
+| 3 | `coerceKit` / slide padding before validation | Don't burn a retry on `#abc` or an off-by-one array |
+| 4 | Separate `theme.accent` (text-grade) from `theme.accentDecor` | Contrast-forcing decoration crushed Stripe's cyan to grey. Decoration needs to be *visible*, not legible |
+| 4 | `fitDisplaySize` caps on the longest unbreakable word | "tab-switching" was breaking across lines at 106px |
+| 4 | Colour maths lives in `lib/render/theme.ts` | Makes hard rule 1 structural rather than a thing to remember |
+| 5 | `sessionStorage` instead of Convex, for now | Convex login is blocked on you; the Convex code is written and waiting |
+| 5 | Stage labels driven by measured timings | Real numbers from the capture probe, not a spinner |
+| 7 | `Publisher` interface in its own file | The seam that makes Instagram a new file, not a refactor |
+| - | Deleted the scaffold's `prefers-color-scheme` block | CLAUDE.md puts dark mode explicitly out of scope |
 
 ---
 
-## Blockers / needs from Johnson
+## Measured facts
 
-- [ ] **Convex login** - `npx convex dev` opens browser OAuth. Interactive, so
-      you run it. Until then `convex/_generated/` is missing, which means
-      `npm run build` fails on `convex/kits.ts`. `npm run dev` is unaffected.
-- [ ] **`ANTHROPIC_API_KEY`** in `.env.local`. **This is the live blocker** - Step 2's
-      code is written but has never made a real call, so the extraction prompt is
-      unvalidated. Everything downstream inherits its quality.
-- [x] ~~Screenshot approach~~ - local Playwright, verified 10/10 on the test URLs.
+Headless capture, 1440x900, Chrome UA, all 10 test URLs:
 
----
-
-## Cut ladder (if behind schedule)
-
-Drop in this order: Bluesky -> template toggle -> inline editing.
-**Never cut:** extraction, one good template, compare mode.
-
----
-
-## Measured facts (so we stop re-deriving them)
-
-Headless capture against the 10 test URLs, 1440x900, Chrome UA:
-
-| Site | Capture | Secs | Words of copy |
+| Site | Capture | Secs | Words |
 |---|---|---|---|
 | stripe.com | ok | 6.1 | 1679 |
 | linear.app | ok | 3.1 | 1383 |
@@ -101,6 +128,24 @@ Headless capture against the 10 test URLs, 1440x900, Chrome UA:
 | craigslist.org | ok | 3.8 | 482 |
 | tartinebakery.com | ok | 4.4 | 427 |
 
-Watch items: **vercel.com** is both the slowest (12-36s, highly variable) and the
-thinnest on copy (130 words), so it's the most likely of the ten to produce a weak
-voice. If we need a tiebreak later, it's the one to drop.
+Render: 1080x1350, ~0.6-2.9s cold (Google font fetch), **0.03-0.15s warm**.
+Target was under 3s.
+
+---
+
+## Watch items
+
+- **vercel.com** is the slowest (12-36s, highly variable) and thinnest on copy
+  (130 words). Most likely of the ten to produce a weak voice. First to drop.
+- **Stripe `#635BFF` and Linear `#5E6AD2` are nearly the same indigo.** They are
+  a poor pair for the side-by-side. `/compare` defaults to **Stripe vs Notion**
+  (indigo grotesque vs black serif) because that difference reads from the back
+  of a room. Craigslist is the strongest contrast if you want a third.
+- Nothing has been posted to Bluesky. The button is wired but unrun.
+
+---
+
+## Cut ladder
+
+Drop in this order: Bluesky -> template toggle -> inline editing.
+**Never cut:** extraction, one good template, compare mode.

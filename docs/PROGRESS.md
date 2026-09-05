@@ -174,6 +174,72 @@ Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
 
 ---
 
+## Logo capture
+
+The kit now carries the company's actual logo as pixels, not a URL.
+
+`logoUrl` was dead code. The model was asked to pick a logo URL from `<img>`
+candidates, and `usableLogo` then accepted only `.png/.jpg`. Measured on the
+test URLs: two of three returned `null`, and the one hit was an `.svg`, which
+was rejected. So `theme.logoSrc` was always null and every render fell back to
+the text wordmark. The cause is structural - most modern sites draw their logo
+as inline `<svg>`, which has no URL to fetch at all.
+
+Instead we now find the logo element and photograph it with Playwright, during
+the screenshot we were already taking. That works for inline SVG, `<img>`, CSS
+backgrounds and webfont wordmarks alike, and yields a transparent PNG that
+Satori renders without a network fetch.
+
+Finding it is a scoring pass, not one selector, because "the logo" is a
+different element on every site: the masthead home link, an `aria-label`,
+something whose class says logo, a child of such a wrapper, or failing all that
+the first mark in the top-left. Candidates must be above the fold and shaped
+like a logo, must not contain a button or several links, and are ranked by how
+high and how far left they sit, plus how tight the crop is.
+
+`logoUrl` is kept as a fallback for the degraded path, which has no browser.
+
+### What broke, and why
+
+| Site | Symptom | Cause |
+|---|---|---|
+| craigslist | Captured the wordmark *and* the "post an ad" button | `.logo-post-group` is a wrapper. `inner()` fell back to returning the wrapper itself at a higher base score than the child tier, so the wrapper always won |
+| craigslist | Then captured "post an ad" alone | The tightness bonus prefers the smaller box, and the button is smaller than the wordmark. Fixed by weighting vertical position above tightness - inside a wrapper the logo sits above what is grouped with it |
+| vercel | Nothing captured at all | Two separate timeouts wearing the same disguise. `elementHandle.screenshot` waits for the element to stop moving and vercel's masthead never does; the clip fallback then failed because `animations: "disabled"` *also* waits for animations to settle, and its 8s timeout was short of what the same page needs for fonts |
+
+The vercel miss was invisible for three rounds because the capture swallowed its
+own exception. It now records why it failed, and that note reaches the UI.
+
+Sites whose element will not hold still fall back to clipping the page, which
+bakes in the header background. Those are flagged `transparent: false` and are
+always drawn on a chip, so they read as a lockup rather than a stray rectangle.
+
+### Hit rate
+
+**10 of 10 test URLs** now yield a usable logo, verified by eye:
+
+| Found via | Sites |
+|---|---|
+| masthead home link | stripe, ramp, tartine, arc, figma, vercel |
+| `aria-label` home/logo | linear, notion, anthropic |
+| child of a logo wrapper | craigslist |
+
+Capture costs nothing extra - it reuses the page load the screenshot already
+needs. Logos come back 0.3-6KB as PNG, so a kit stays small enough for
+sessionStorage and for the render POST body. The base64 never reaches an LLM
+prompt: extraction returns it, and the generation and strategy prompts only read
+name, tagline, imagery and voice.
+
+### The light-logo problem
+
+A white wordmark lifted off a dark masthead vanishes on a light template. We
+never read the logo's pixels, so we reason from what it sat on: `background` is
+recorded at capture time, and when its lightness disagrees with the template
+background, `theme.logoChip` gives the logo back the surface it was drawn for.
+Stripe's dark wordmark on the indigo Statement is the visible case.
+
+---
+
 ## Stage 2.5 - measured
 
 Three sites, deliberately far apart. Same code, same prompt.

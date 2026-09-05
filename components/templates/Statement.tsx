@@ -84,17 +84,38 @@ export function Statement({
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
+          // A long tagline used to run left underneath the logo. The logo holds
+          // its width; the tagline gives way and stays on its own side.
+          gap: "32px",
         }}
       >
         {theme.logoSrc ? (
-          // Satori renders this, not the browser - next/image does not apply.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={theme.logoSrc}
-            height={46}
-            style={{ height: "46px", objectFit: "contain" }}
-            alt=""
-          />
+          // theme.logoChip is set only when the captured logo would vanish
+          // against this background - it gives the logo back the surface it
+          // was drawn for. Colour comes from the theme; hard rule 1 holds.
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              flexShrink: 0,
+              ...(theme.logoChip
+                ? {
+                    backgroundColor: theme.logoChip,
+                    padding: "14px 20px",
+                    borderRadius: `${Math.min(theme.radius, 10)}px`,
+                  }
+                : {}),
+            }}
+          >
+            {/* Satori renders this, not the browser - next/image does not apply. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={theme.logoSrc}
+              height={46}
+              style={{ height: "46px", objectFit: "contain" }}
+              alt=""
+            />
+          </div>
         ) : (
           <div
             style={{
@@ -110,7 +131,17 @@ export function Statement({
           </div>
         )}
 
-        <div style={{ display: "flex", fontSize: "23px", color: theme.muted }}>
+        <div
+          style={{
+            display: "flex",
+            flexShrink: 1,
+            maxWidth: "560px",
+            fontSize: "23px",
+            lineHeight: 1.35,
+            textAlign: "right",
+            color: theme.muted,
+          }}
+        >
           {kit.tagline}
         </div>
       </div>

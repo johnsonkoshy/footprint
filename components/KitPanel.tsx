@@ -30,6 +30,33 @@ export function KitPanel({
         <span className="truncate text-sm text-zinc-500">{kit.tagline}</span>
       </div>
 
+      {kit.logo ? (
+        <div className="flex items-center gap-3">
+          {/* On its captured background, so a white wordmark is still visible here. */}
+          <span
+            className="flex h-14 min-w-0 flex-1 items-center justify-center rounded-lg px-3 ring-1 ring-inset ring-black/10"
+            style={{ backgroundColor: kit.logo.background }}
+          >
+            {/* A data URI we captured ourselves; next/image has nothing to optimise. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={kit.logo.dataUri}
+              alt={`${kit.name} logo`}
+              className="max-h-9 w-auto max-w-full object-contain"
+            />
+          </span>
+          {onChange ? (
+            <button
+              onClick={() => onChange({ ...kit, logo: null })}
+              className="shrink-0 text-xs text-zinc-400 underline hover:text-zinc-700"
+              title="Fall back to setting the name as a wordmark"
+            >
+              Use wordmark
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-4 gap-2">
         {SWATCHES.map(({ key, label }) => (
           <label key={key} className="group flex cursor-pointer flex-col gap-1.5">

@@ -29,17 +29,45 @@ export type RenderTheme = {
   bodyFamily: string;
   /** Raster logo we're willing to hand Satori, else null and we set a wordmark. */
   logoSrc: string | null;
+  /**
+   * A backing colour for the logo, set only when the captured logo would
+   * disappear against `bg` - a white wordmark lifted off a dark masthead and
+   * dropped onto a light surface. null means place it bare.
+   */
+  logoChip: string | null;
 };
 
-/** Satori is happiest with plain raster images. SVG and webp are a coin flip. */
-function usableLogo(url: string | null): string | null {
-  if (!url) return null;
+/**
+ * Prefer the logo we photographed ourselves: it is already a PNG, it is already
+ * transparent, and it needs no network fetch at render time. The model-supplied
+ * URL stays as a fallback, still restricted to formats Satori decodes reliably
+ * - SVG and webp are a coin flip.
+ */
+function usableLogo(kit: BrandKit): string | null {
+  if (kit.logo?.dataUri) return kit.logo.dataUri;
+  if (!kit.logoUrl) return null;
   try {
-    const path = new URL(url).pathname.toLowerCase();
-    return /\.(png|jpg|jpeg)$/.test(path) ? url : null;
+    const path = new URL(kit.logoUrl).pathname.toLowerCase();
+    return /\.(png|jpg|jpeg)$/.test(path) ? kit.logoUrl : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * We never read the logo's pixels, so we reason from what it sat on instead: a
+ * logo lifted off a dark masthead is almost certainly light-coloured, and will
+ * vanish on a light background. When the two disagree, give it back the
+ * background it was designed for.
+ */
+function logoChipFor(kit: BrandKit, bg: string): string | null {
+  const captured = kit.logo;
+  if (!captured) return null;
+  // A clipped capture carries its own background already, so it needs the chip
+  // regardless - otherwise it reads as a stray rectangle.
+  if (!captured.transparent) return captured.background;
+  if (isLight(captured.background) === isLight(bg)) return null;
+  return captured.background;
 }
 
 export function buildTheme(kit: BrandKit, template: TemplateId): RenderTheme {
@@ -86,7 +114,8 @@ export function buildTheme(kit: BrandKit, template: TemplateId): RenderTheme {
     radius: kit.geometry.radius,
     displayFamily: resolveFont(kit.typography.display).google,
     bodyFamily: resolveFont(kit.typography.body).google,
-    logoSrc: usableLogo(kit.logoUrl),
+    logoSrc: usableLogo(kit),
+    logoChip: logoChipFor(kit, bg),
   };
 }
 

@@ -10,6 +10,23 @@ const Hex = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, "must be a 6-digit hex color like #1A2B3C");
 
+/**
+ * The logo as captured pixels. Measured during the screenshot, never asked of
+ * the model - same principle as SiteSignals. `background` records what it sat
+ * on, which is how a template tells a white logo from a black one without
+ * reading pixels.
+ */
+export const LogoAssetSchema = z.object({
+  dataUri: z.string().startsWith("data:image/", "must be a data URI"),
+  width: z.number(),
+  height: z.number(),
+  background: Hex,
+  transparent: z.boolean().default(true),
+  how: z.string(),
+});
+
+export type LogoAsset = z.infer<typeof LogoAssetSchema>;
+
 export const BrandKitSchema = z.object({
   name: z.string().describe("The company or product name as they write it"),
   tagline: z.string().describe("Their own one-line positioning, in their words"),
@@ -27,6 +44,8 @@ export const BrandKitSchema = z.object({
     radius: z.number().describe("Corner radius in px seen on their buttons and cards"),
   }),
   logoUrl: z.string().nullable().describe("Absolute URL to a logo image, or null"),
+  /** Defaulted so kits saved before logo capture existed still validate. */
+  logo: LogoAssetSchema.nullable().default(null),
   imagery: z.object({
     style: z.string().describe("Their visual language in a phrase, e.g. 'flat gradients, no photography'"),
   }),
@@ -63,6 +82,7 @@ export const DEFAULT_BRAND_KIT: BrandKit = {
   typography: { display: "Inter", body: "Inter" },
   geometry: { radius: 8 },
   logoUrl: null,
+  logo: null,
   imagery: { style: "neutral, typographic, no photography" },
   voice: {
     tone: "plain and direct",

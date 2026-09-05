@@ -4,7 +4,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { BrandKitSchema, DEFAULT_BRAND_KIT, type BrandKit, type SiteSignals } from "@/types";
 import { signalsFromPage } from "@/lib/strategy/signals";
-import { fetchSite, type SiteCapture } from "./fetchSite";
+import { fetchSite, type LogoCapture, type SiteCapture } from "./fetchSite";
 import { resolveFont } from "./fonts";
 
 /**
@@ -121,7 +121,10 @@ inventing colours. Reason: ${site.note ?? "unknown"}`;
 }
 
 /** Fix the trivial format slips so we don't burn a retry on them. */
-function coerceKit(draft: z.infer<typeof BrandKitDraftSchema>): unknown {
+function coerceKit(
+  draft: z.infer<typeof BrandKitDraftSchema>,
+  logo: LogoCapture | null,
+): unknown {
   const hex = (v: string): string => {
     let s = (v ?? "").trim();
     if (!s.startsWith("#")) s = `#${s}`;
@@ -144,6 +147,7 @@ function coerceKit(draft: z.infer<typeof BrandKitDraftSchema>): unknown {
     },
     geometry: { radius: Math.max(0, Math.round(draft.geometry.radius)) },
     logoUrl: draft.logoUrl?.trim() ? draft.logoUrl.trim() : null,
+    logo,
     voice: { ...draft.voice, avoid: draft.voice.avoid.slice(0, 8) },
   };
 }
@@ -174,13 +178,18 @@ export async function extractBrandKit(
   // Free: derived from the page we just loaded, no extra requests. The audit
   // stage adds HTTP probes on top of this only when the user asks for a plan.
   const signals = signalsFromPage(rawUrl, site.raw, Boolean(site.ogImage));
+  if (site.logo) {
+    notes.push(`logo captured via ${site.logo.how} (${site.logo.width}x${site.logo.height})`);
+  } else if (site.logoNote) {
+    notes.push(site.logoNote);
+  }
 
   opts.onStage?.("analyzing");
 
   if (!hasApiKey()) {
     notes.push(MISSING_KEY_MESSAGE);
     return {
-      kit: { ...DEFAULT_BRAND_KIT, name: site.title || DEFAULT_BRAND_KIT.name },
+      kit: { ...DEFAULT_BRAND_KIT, name: site.title || DEFAULT_BRAND_KIT.name, logo: site.logo },
       usedFallback: true,
       degraded: site.degraded,
       model: EXTRACT_MODEL,
@@ -232,7 +241,7 @@ export async function extractBrandKit(
         continue;
       }
 
-      const validated = BrandKitSchema.safeParse(coerceKit(draft));
+      const validated = BrandKitSchema.safeParse(coerceKit(draft, site.logo));
       if (validated.success) {
         const kit = validated.data;
         return {
@@ -266,7 +275,7 @@ export async function extractBrandKit(
   }
 
   return {
-    kit: { ...DEFAULT_BRAND_KIT, name: site.title || DEFAULT_BRAND_KIT.name },
+    kit: { ...DEFAULT_BRAND_KIT, name: site.title || DEFAULT_BRAND_KIT.name, logo: site.logo },
     usedFallback: true,
     degraded: site.degraded,
     model: EXTRACT_MODEL,

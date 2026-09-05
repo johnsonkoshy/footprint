@@ -13,6 +13,7 @@ export const FIXTURE_KITS: Record<string, BrandKit> = {
     typography: { display: "Sohne", body: "Sohne" },
     geometry: { radius: 8 },
     logoUrl: null,
+    logo: null,
     imagery: { style: "gradient meshes and layered product UI, no stock photography" },
     voice: {
       tone: "precise, technical, quietly confident",
@@ -27,6 +28,7 @@ export const FIXTURE_KITS: Record<string, BrandKit> = {
     typography: { display: "Inter Display", body: "Inter" },
     geometry: { radius: 6 },
     logoUrl: null,
+    logo: null,
     imagery: { style: "dark UI screenshots, subtle gradients, high-contrast minimal chrome" },
     voice: {
       tone: "terse, opinionated, engineer-to-engineer",
@@ -41,6 +43,7 @@ export const FIXTURE_KITS: Record<string, BrandKit> = {
     typography: { display: "Lyon Display", body: "Inter" },
     geometry: { radius: 4 },
     logoUrl: null,
+    logo: null,
     imagery: { style: "hand-drawn line illustration, warm off-white paper, product UI in soft shadow" },
     voice: {
       tone: "warm, plainspoken, faintly playful",
@@ -55,6 +58,7 @@ export const FIXTURE_KITS: Record<string, BrandKit> = {
     typography: { display: "Helvetica", body: "Times New Roman" },
     geometry: { radius: 0 },
     logoUrl: null,
+    logo: null,
     imagery: { style: "no imagery at all, plain blue hyperlinks on white" },
     voice: {
       tone: "utilitarian, terse, lowercase",

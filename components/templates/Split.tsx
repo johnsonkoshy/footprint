@@ -41,14 +41,31 @@ export function Split({
         }}
       >
         {theme.logoSrc ? (
-          // Satori renders this, not the browser - next/image does not apply.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={theme.logoSrc}
-            height={38}
-            style={{ height: "38px", objectFit: "contain" }}
-            alt=""
-          />
+          // theme.logoChip is set only when the captured logo would vanish
+          // against this background - it gives the logo back the surface it
+          // was drawn for. Colour comes from the theme; hard rule 1 holds.
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              ...(theme.logoChip
+                ? {
+                    backgroundColor: theme.logoChip,
+                    padding: "14px 20px",
+                    borderRadius: `${Math.min(theme.radius, 10)}px`,
+                  }
+                : {}),
+            }}
+          >
+            {/* Satori renders this, not the browser - next/image does not apply. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={theme.logoSrc}
+              height={38}
+              style={{ height: "38px", objectFit: "contain" }}
+              alt=""
+            />
+          </div>
         ) : (
           <div
             style={{

@@ -13,25 +13,20 @@ on-brand rendered images, side by side. **This works today** (see `/compare`).
 |---|---|---|---|
 | 0 | CLAUDE.md | DONE | Verbatim from the pack |
 | 1 | Scaffold + types | DONE | `npm run dev` and `npm run build` both pass |
-| 2 | Extraction | CODE DONE, **UNGATED** | 8/10 test URLs give a usable kit - **needs API key** |
-| 3 | Generation | CODE DONE, **UNGATED** | Stripe vs Notion read as different companies - **needs API key** |
+| 2 | Extraction | **DONE, GATE PASSED** | **10 of 10** produced a usable kit (bar was 8) |
+| 3 | Generation | **DONE, GATE PASSED** | Stripe / Notion / craigslist read as three different companies |
 | 4 | Rendering | DONE, verified | Judged four rendered PNGs. Yes, postable |
 | 5 | Viewer (`/`) | DONE | Empty, loading, fallback and ready states all seen working |
 | 6 | Compare (`/compare`) | DONE, verified | Two brands side by side, screenshotted |
 | 7 | Bluesky publish | CODE DONE, unrun | Needs app-password env vars. **Nothing has been posted** |
 
-Everything the API key blocks is written and typechecked; it has just never
-made a real call. Everything else has been run and looked at.
+All eight steps built and verified against real API calls.
 
 ---
 
 ## The two blockers, and exactly what they block
 
-- [ ] **`ANTHROPIC_API_KEY` in `.env.local`** - blocks the Step 2 and Step 3
-      gates. Without it `/api/extract` returns a neutral fallback kit after
-      ~5s (capture succeeds, the model call fails twice, fallback serves).
-      The UI shows an amber warning when this happens, which is how we know
-      the failure path works.
+- [x] ~~`ANTHROPIC_API_KEY`~~ - set, both gates run and passed.
 - [ ] **`npx convex dev`** - browser OAuth, so it has to be you. Schema and
       functions are written in `convex/`. The viewer currently persists to
       `sessionStorage` instead, so a refresh doesn't lose 40 seconds of work.
@@ -108,6 +103,36 @@ scripts/test-extract.mjs, scripts/test-generate.mjs
 | 5 | Stage labels driven by measured timings | Real numbers from the capture probe, not a spinner |
 | 7 | `Publisher` interface in its own file | The seam that makes Instagram a new file, not a refactor |
 | - | Deleted the scaffold's `prefers-color-scheme` block | CLAUDE.md puts dark mode explicitly out of scope |
+
+---
+
+## Model choice - measured, not guessed
+
+Same five URLs, same prompt, back to back:
+
+| | Opus 5 extraction | Sonnet 5 extraction |
+|---|---|---|
+| Cost per URL | $0.049 | $0.016 (3.2x cheaper) |
+| Time per URL | 19.8s | 12.1s |
+| Named a real typeface | 4 of 5 (Söhne, Inter Display, Georgia, Styrene B) | **1 of 5** - four came back as generic "neo-grotesque" |
+| anthropic.com primary | `#D97757` - the clay that IS their brand | **`#141413`** - near-black, same as ink |
+
+Sonnet's two failures are the ones that matter most. Collapsing every font to
+"neo-grotesque" maps every brand to the same Inter substitute, which erases the
+typographic difference the side-by-side demo depends on. And returning near-black
+for Anthropic is exactly the failure the prompt warns against - reporting the
+background instead of finding the brand colour.
+
+Generation is the opposite story: **Sonnet 5 is plenty**, and it is the default.
+Stripe, Notion and craigslist came back in three clearly distinct voices with
+every `voice.avoid` rule respected, including craigslist staying all-lowercase.
+
+**Settled:** `claude-opus-5` for extraction (the wedge), `claude-sonnet-5` for
+generation. About **5.5 cents per brand**, end to end. Override either with
+`EXTRACT_MODEL` / `GENERATE_MODEL` in `.env.local`; unknown values warn and fall
+back rather than 404-ing every request.
+
+Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
 
 ---
 

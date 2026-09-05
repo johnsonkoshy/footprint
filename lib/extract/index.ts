@@ -1,12 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getClient, hasApiKey, MISSING_KEY_MESSAGE } from "@/lib/anthropic";
+import { getClient, hasApiKey, EXTRACT_MODEL, MISSING_KEY_MESSAGE } from "@/lib/anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { BrandKitSchema, DEFAULT_BRAND_KIT, type BrandKit } from "@/types";
 import { fetchSite, type SiteCapture } from "./fetchSite";
 import { resolveFont } from "./fonts";
-
-const MODEL = "claude-opus-5";
 
 /**
  * The schema we hand the model is deliberately looser than BrandKitSchema -
@@ -23,7 +21,17 @@ const BrandKitDraftSchema = z.object({
     surface: z.string().describe("6-digit hex"),
     accent: z.string().describe("6-digit hex"),
   }),
-  typography: z.object({ display: z.string(), body: z.string() }),
+  typography: z.object({
+    display: z
+      .string()
+      .describe(
+        "ONLY the family name, 1-3 words. e.g. 'Söhne' or 'GT America'. If you " +
+          "don't recognise it, give a bare classification instead: 'geometric sans', " +
+          "'neo-grotesque', 'transitional serif', 'slab serif', or 'mono'. Never a " +
+          "sentence, never a description, never tracking or weight notes.",
+      ),
+    body: z.string().describe("Same rule: family name or bare classification only."),
+  }),
   geometry: z.object({ radius: z.number() }),
   logoUrl: z.string().nullable(),
   imagery: z.object({ style: z.string() }),
@@ -48,10 +56,13 @@ enough. "ink" is the darkest text colour actually used, "surface" is the page
 background, "accent" is the secondary colour used for emphasis, links, or
 illustration. Report exact 6-digit hex, sampled from what you can see.
 
-TYPE. Name the actual families if you recognise them - designers know Söhne,
-Circular, GT America, Tiempos on sight. If you do not recognise it, describe the
-skeleton instead ("geometric sans", "tight neo-grotesque", "high-contrast serif").
-Do not default to Helvetica or Inter because they are safe.
+TYPE. Give the family NAME and nothing else - designers know Söhne, Circular,
+GT America, Tiempos on sight, so name them. If you do not recognise it, give a
+bare two-word classification instead: "geometric sans", "neo-grotesque",
+"transitional serif", "slab serif", "mono". This field is machine-read to pick a
+substitute font, so it must be a name, not a sentence. No tracking notes, no
+x-height commentary, no parentheticals. Do not default to Helvetica or Inter
+because they are safe.
 
 GEOMETRY. Look at the buttons and cards and report their corner radius in px.
 Sharp corners are 0. A pill is large. This single number carries a lot of brand.
@@ -142,6 +153,7 @@ export type ExtractionResult = {
   usedFallback: boolean;
   degraded: boolean;
   fonts: { display: ReturnType<typeof resolveFont>; body: ReturnType<typeof resolveFont> };
+  model: string;
   notes: string[];
   usage?: { input: number; output: number };
 };
@@ -164,6 +176,7 @@ export async function extractBrandKit(
       kit: { ...DEFAULT_BRAND_KIT, name: site.title || DEFAULT_BRAND_KIT.name },
       usedFallback: true,
       degraded: site.degraded,
+      model: EXTRACT_MODEL,
       fonts: {
         display: resolveFont(DEFAULT_BRAND_KIT.typography.display),
         body: resolveFont(DEFAULT_BRAND_KIT.typography.body),
@@ -183,7 +196,7 @@ export async function extractBrandKit(
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const response = await client.messages.parse({
-        model: MODEL,
+        model: EXTRACT_MODEL,
         max_tokens: 16000,
         system: SYSTEM,
         messages,
@@ -218,6 +231,7 @@ export async function extractBrandKit(
           kit,
           usedFallback: false,
           degraded: site.degraded,
+          model: EXTRACT_MODEL,
           fonts: {
             display: resolveFont(kit.typography.display),
             body: resolveFont(kit.typography.body),
@@ -246,6 +260,7 @@ export async function extractBrandKit(
     kit: { ...DEFAULT_BRAND_KIT, name: site.title || DEFAULT_BRAND_KIT.name },
     usedFallback: true,
     degraded: site.degraded,
+    model: EXTRACT_MODEL,
     fonts: {
       display: resolveFont(DEFAULT_BRAND_KIT.typography.display),
       body: resolveFont(DEFAULT_BRAND_KIT.typography.body),

@@ -29,7 +29,7 @@ for (const brand of brands) {
   const json = await res.json();
   process.stderr.write(`${((Date.now() - t0) / 1000).toFixed(1)}s\n`);
 
-  console.log(`\n\x1b[1m${kit.name.toUpperCase()}\x1b[0m  [${kit.voice.tone}]`);
+  console.log(`\n\x1b[1m${kit.name.toUpperCase()}\x1b[0m  [${kit.voice.tone}]  \x1b[2m${json.model ?? ""}\x1b[0m`);
   console.log(`must never: ${kit.voice.avoid.join(" | ")}`);
   console.log("-".repeat(78));
   if (json.error || json.usedFallback) {

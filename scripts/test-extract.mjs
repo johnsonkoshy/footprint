@@ -91,4 +91,18 @@ for (const r of rows) {
 }
 
 const good = rows.filter((r) => !r.error && !r.usedFallback).length;
-console.log(`\n${good} of ${rows.length} produced a kit. Gate is 8 of 10.`);
+
+const PRICE = {
+  "claude-opus-5": [5, 25],
+  "claude-sonnet-5": [2, 10],
+  "claude-haiku-4-5": [1, 5],
+};
+const cost = rows.reduce((sum, r) => {
+  const p = PRICE[r?.model];
+  if (!p || !r?.usage) return sum;
+  return sum + (r.usage.input * p[0] + r.usage.output * p[1]) / 1e6;
+}, 0);
+
+const model = rows.find((r) => r.model)?.model ?? "unknown";
+console.log(`\nmodel: ${model}   run cost: $${cost.toFixed(4)}`);
+console.log(`${good} of ${rows.length} produced a kit. Gate is 8 of 10.`);

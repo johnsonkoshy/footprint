@@ -1,10 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getClient, hasApiKey, MISSING_KEY_MESSAGE } from "@/lib/anthropic";
+import { getClient, hasApiKey, GENERATE_MODEL, MISSING_KEY_MESSAGE } from "@/lib/anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { ContentSetSchema, DEFAULT_CONTENT_SET, type BrandKit, type ContentSet } from "@/types";
-
-const MODEL = "claude-opus-5";
 
 /** Loose for the model, strict on the way back in - same contract as extraction. */
 const ContentDraftSchema = z.object({
@@ -67,6 +65,7 @@ Write the post set as ${kit.name} would.`;
 export type GenerationResult = {
   content: ContentSet;
   usedFallback: boolean;
+  model: string;
   notes: string[];
   usage?: { input: number; output: number };
 };
@@ -81,6 +80,7 @@ export async function generateContent(
     return {
       content: { ...DEFAULT_CONTENT_SET, hook: kit.tagline, caption: kit.tagline },
       usedFallback: true,
+      model: GENERATE_MODEL,
       notes: [MISSING_KEY_MESSAGE],
     };
   }
@@ -94,7 +94,7 @@ export async function generateContent(
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const response = await client.messages.parse({
-        model: MODEL,
+        model: GENERATE_MODEL,
         max_tokens: 16000,
         system: SYSTEM,
         messages,
@@ -123,7 +123,7 @@ export async function generateContent(
         if (validated.success) {
           const violations = kit.voice.avoid.filter((rule) => breaks(rule, validated.data));
           if (violations.length) notes.push(`possible voice violations: ${violations.join("; ")}`);
-          return { content: validated.data, usedFallback: false, notes, usage };
+          return { content: validated.data, usedFallback: false, model: GENERATE_MODEL, notes, usage };
         }
 
         const issues = validated.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
@@ -143,6 +143,7 @@ export async function generateContent(
   return {
     content: { ...DEFAULT_CONTENT_SET, hook: kit.tagline, caption: kit.tagline },
     usedFallback: true,
+    model: GENERATE_MODEL,
     notes,
     usage,
   };

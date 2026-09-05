@@ -174,6 +174,42 @@ Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
 
 ---
 
+## Stage 2.5 - measured
+
+Three sites, deliberately far apart. Same code, same prompt.
+
+| | stripe.com | tartinebakery.com | craigslist.org |
+|---|---|---|---|
+| Socials found | GitHub, YouTube | Facebook, Instagram | none |
+| Content surfaces | Blog, Customer stories, Resource library | none | none |
+| Marketing tech | LinkedIn Insight, X Pixel, **Marketo** | GTM, GA, **Meta Pixel** | none |
+| Maturity call | active | emerging | **invisible** |
+| Start here | YouTube | Instagram | **RSS** |
+| Skip | Twitter/X | TikTok | LinkedIn |
+
+Craigslist is the one that proves the plan is not a template. It came back
+"thirty years of not marketing, and the evidence shows it", entirely in
+lowercase because that is in their `voice.avoid`, and it opened with RSS
+auto-published per listing rather than a social channel. Its content briefs are
+category feed notes, scam-pattern safety notices and posting-delay status notes.
+No generic playbook produces that answer.
+
+Timing, measured: surface probes 0.2-1.4s. The plan itself 49-92s, scaling with
+how much there is to say - Tartine 49s, craigslist 84s, Stripe 92s. It starts
+automatically when extraction returns, so the wait overlaps with reading the
+brand panel rather than following it.
+
+Cost per brand, end to end: **about 9 cents** - ~5c extraction (Opus), ~3c plan
+(Sonnet, ~2.9k in / ~7k out), ~1c generation. Override with `STRATEGY_MODEL`.
+
+Constrained decoding is token-hungry: a 6.5KB plan costs ~7k output tokens,
+roughly four times what the same text would cost as free prose. Tightening the
+field descriptions cut wall time from 117s to 84-92s but barely moved the token
+count. If the plan needs to be faster, the lever is asking for fewer sections,
+not shorter ones.
+
+---
+
 ## Measured facts
 
 Headless capture, 1440x900, Chrome UA, all 10 test URLs:
@@ -205,10 +241,22 @@ Target was under 3s.
   (indigo grotesque vs black serif) because that difference reads from the back
   of a room. Craigslist is the strongest contrast if you want a third.
 - Nothing has been posted to Bluesky. The button is wired but unrun.
+- **Tartine's typography came back as "mono"**, which is wrong for a bakery -
+  the extraction fell to a bare classification and picked the wrong one. It is
+  an extraction-stage issue, not a plan issue, and it does show up in the
+  rendered image. Worth a look before demoing that URL.
+- **The audit reads their own site, not the wider web.** It answers "what
+  marketing has this company built" from first-party evidence. It does not
+  search for press mentions, review counts or competitor share of voice. Adding
+  the API's web-search tool to the strategy call is the obvious next lever, at
+  the cost of another 30-60s.
+- The plan is the slowest stage. If a demo is time-boxed, extract first and let
+  the plan run while you talk through the brand panel.
 
 ---
 
 ## Cut ladder
 
-Drop in this order: Bluesky -> template toggle -> inline editing.
+Drop in this order: Bluesky -> template toggle -> inline editing -> experiments
+and timeline sections of the plan (keep audit + channels + content briefs).
 **Never cut:** extraction, one good template, compare mode.

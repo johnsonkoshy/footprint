@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getClient, hasApiKey, MISSING_KEY_MESSAGE } from "@/lib/anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { BrandKitSchema, DEFAULT_BRAND_KIT, type BrandKit } from "@/types";
@@ -156,7 +157,22 @@ export async function extractBrandKit(
   if (site.degraded) notes.push(site.note ?? "no screenshot");
 
   opts.onStage?.("analyzing");
-  const client = new Anthropic();
+
+  if (!hasApiKey()) {
+    notes.push(MISSING_KEY_MESSAGE);
+    return {
+      kit: { ...DEFAULT_BRAND_KIT, name: site.title || DEFAULT_BRAND_KIT.name },
+      usedFallback: true,
+      degraded: site.degraded,
+      fonts: {
+        display: resolveFont(DEFAULT_BRAND_KIT.typography.display),
+        body: resolveFont(DEFAULT_BRAND_KIT.typography.body),
+      },
+      notes,
+    };
+  }
+
+  const client = getClient();
   const messages: Anthropic.MessageParam[] = [
     { role: "user", content: buildUserContent(site) },
   ];

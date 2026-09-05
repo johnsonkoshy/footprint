@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getClient, hasApiKey, MISSING_KEY_MESSAGE } from "@/lib/anthropic";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { ContentSetSchema, DEFAULT_CONTENT_SET, type BrandKit, type ContentSet } from "@/types";
@@ -75,7 +76,16 @@ export async function generateContent(
   topic: string,
 ): Promise<GenerationResult> {
   const notes: string[] = [];
-  const client = new Anthropic();
+
+  if (!hasApiKey()) {
+    return {
+      content: { ...DEFAULT_CONTENT_SET, hook: kit.tagline, caption: kit.tagline },
+      usedFallback: true,
+      notes: [MISSING_KEY_MESSAGE],
+    };
+  }
+
+  const client = getClient();
   const messages: Anthropic.MessageParam[] = [
     { role: "user", content: buildPrompt(kit, topic) },
   ];

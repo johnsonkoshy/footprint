@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   MarketingPlanSchema,
   DEFAULT_MARKETING_PLAN,
+  type Audience,
   type BrandKit,
   type MarketingPlan,
   type SiteSignals,
@@ -40,11 +41,11 @@ const PlanDraftSchema = z.object({
   timeline: z.array(
     z.object({ window: z.string(), focus: z.string(), deliverables: z.array(z.string()) }),
   ),
-  kpis: z.array(z.object({ metric: z.string(), target: z.string(), why: z.string() })),
 });
 
-const SYSTEM = `You are a marketing strategist doing an outside-in audit. You have never
-spoken to this company. Everything you know is on the page in front of you: their brand,
+const SYSTEM = `You are a marketing strategist advising a very early stage founder - one
+or two people, no marketing hire, a couple of hours a week, no budget. Recommend things
+one person can do on a Tuesday, never a campaign. You have never spoken to this company. Everything you know is on the page in front of you: their brand,
 their voice, and a list of what we could actually observe about their marketing footprint.
 
 Read the EVIDENCE block literally. It is measured, not guessed.
@@ -85,9 +86,11 @@ imagine the result coming back negative, it is not an experiment, it is a task.
 timeline - 3 phases covering roughly the first quarter. Deliverables are countable
 things, not intentions.
 
-kpis - exactly 3. Every target is a number with a timeframe. For each, say what decision
-that number would change. If the answer is "nothing", it is a vanity metric and you
-should pick a different one.
+If a BUYER block is present, it is the brief. The channels you pick are the ones where
+those specific people already are - the "where" entries are named for you, so use them
+instead of reaching for whichever platform is largest. Every recommendation must plausibly
+move the north star metric; if it cannot, do not recommend it. Do not restate the KPIs,
+they are already on screen above your plan.
 
 Be brief everywhere. Every field is read at a glance in a UI, not in a document. One
 sentence where one sentence will do, and no field restates another.
@@ -103,7 +106,25 @@ Two rules that override everything above:
    you have written a template, not a strategy. Every rationale must point at something
    specific about this company.`;
 
-function buildPrompt(kit: BrandKit, signals: SiteSignals, goal: string): string {
+function describeAudience(a: Audience): string {
+  return `BUYER - already established, write the plan for these people
+Stage: ${a.stage}
+Positioning: ${a.positioning}
+${a.icp
+  .map(
+    (p) =>
+      `- ${p.name}\n    what makes them buy: ${p.pain}\n    already gathers at: ${
+        p.where.join(", ") || "no named place found"
+      }`,
+  )
+  .join("\n")}
+
+THE NUMBER THIS PLAN MUST MOVE
+North star: ${a.kpis.northStar.metric} - ${a.kpis.northStar.target}
+${a.kpis.supporting.map((k) => `Also: ${k.metric} - ${k.target}`).join("\n")}`;
+}
+
+function buildPrompt(kit: BrandKit, signals: SiteSignals, goal: string, audience?: Audience | null): string {
   return `COMPANY: ${kit.name}
 How they position themselves: ${kit.tagline}
 Visual language: ${kit.imagery.style}
@@ -115,6 +136,8 @@ things they never do: ${kit.voice.avoid.map((a) => `\n  - ${a}`).join("")}
 
 EVIDENCE - what we could actually observe about their marketing footprint
 ${describeSignals(signals)}
+
+${audience ? describeAudience(audience) : ""}
 
 ${goal.trim() ? `WHAT THEY WANT OUT OF THIS\n${goal.trim()}\n` : ""}
 Write the audit and plan.`;
@@ -179,7 +202,6 @@ function coercePlan(draft: z.infer<typeof PlanDraftSchema>, signals: SiteSignals
     contentTypes: draft.contentTypes.slice(0, 3),
     experiments: draft.experiments.slice(0, 2),
     timeline: draft.timeline.slice(0, 3).map((t) => ({ ...t, deliverables: t.deliverables.slice(0, 3) })),
-    kpis: draft.kpis.slice(0, 3),
   };
 }
 
@@ -187,6 +209,7 @@ export async function buildStrategy(
   kit: BrandKit,
   signals: SiteSignals,
   goal = "",
+  audience?: Audience | null,
 ): Promise<StrategyResult> {
   const notes: string[] = [];
 
@@ -202,7 +225,7 @@ export async function buildStrategy(
 
   const client = getClient();
   const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: buildPrompt(kit, signals, goal) },
+    { role: "user", content: buildPrompt(kit, signals, goal, audience) },
   ];
   let usage: StrategyResult["usage"];
 
@@ -230,7 +253,6 @@ export async function buildStrategy(
           draft.channels.length > 4 && `channels ${draft.channels.length}`,
           draft.contentTypes.length > 3 && `contentTypes ${draft.contentTypes.length}`,
           draft.experiments.length > 2 && `experiments ${draft.experiments.length}`,
-          draft.kpis.length > 3 && `kpis ${draft.kpis.length}`,
         ].filter(Boolean);
         if (over.length) notes.push(`model overproduced and we trimmed: ${over.join(", ")}`);
 

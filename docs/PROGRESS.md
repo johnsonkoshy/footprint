@@ -94,6 +94,8 @@ lib/extract/fonts.ts            proprietary family -> class -> Google Font
 lib/extract/index.ts            the audit prompt + parse/validate/retry/fallback
 lib/strategy/signals.ts         measured footprint: socials, surfaces, martech, probes
 lib/strategy/index.ts           the strategist prompt + the same safety loop
+lib/strategy/rebuild.ts         rewrite the plan for the founder's own picks
+lib/market/index.ts             audience (fast) + competitors (web search)
 components/stages/              Stage shell + Brand, Footprint, Plan, Post cards
 components/Canvas.tsx           the sticky right pane: fixtures -> screenshot -> post
 lib/generate/index.ts           voice-enforcing prompt + the same safety loop
@@ -172,6 +174,83 @@ generation. About **5.5 cents per brand**, end to end. Override either with
 back rather than 404-ing every request.
 
 Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
+
+---
+
+## Stage 2.6 - Market, and who the tool is for
+
+The audience is now fixed: **a very early stage founder.** One or two people, no
+marketing hire, a couple of hours a week, no budget. That is a constant in the
+prompts, not a setting, and it changes what a good answer looks like - a founder
+has no baseline, so every target is absolute and time-boxed ("40 orders/week by
+week 6"), never a percentage change.
+
+Footprint says what a company has already built. For a founder that is nearly
+always "nothing", which is true but thin. Their real unknowns are who buys this,
+who else sells it, and what number proves it works. That is the Market stage,
+and it sits **before** the plan - KPIs are not a byproduct of picking a channel,
+they constrain the choice. The plan is written against the north star and the
+ICP's named hangouts.
+
+### Two calls, because their costs are nothing alike
+
+A single combined call measured **233 seconds**. Splitting it and capping the
+search budget got each half under 30:
+
+| | Audience | Competitors |
+|---|---|---|
+| Web search | none | up to 2 |
+| Measured | ~20s | **24.8s** (was 233s) |
+| Reads | their own homepage copy | live search results |
+| Blocks the plan | yes | no |
+
+The fix for the 233s was budget discipline in the system prompt - "run at most
+two searches, then answer immediately, do not verify or cross-check" - plus
+`max_uses: 2` and a lower `max_tokens`. Quality held: real competitors with real
+URLs.
+
+The two fire together the moment extraction returns, and the plan waits only on
+the fast one. Competitor research is the longest call in the app and nothing
+downstream needs it, so it lands whenever it lands.
+
+Competitors get one attempt, not two. A retry means a second round of web
+searches, which costs more than the rest of the pipeline combined. The prompt
+requires every URL to be one actually seen in results, and an empty list with a
+reason is the correct answer when search finds nothing - a founder can act on
+"nobody is doing this" but is harmed by three plausible companies that do not
+exist.
+
+### The founder chooses; the plan follows
+
+The first strategy call proposes. The founder then ticks channels and formats -
+seeded from our recommendation, so agreeing costs zero clicks - and a rebuild
+writes the plan for exactly what they chose. `/api/plan` is told the choice is
+final and not to relitigate it: pick Nextdoor over Instagram and Instagram
+disappears from the plan entirely rather than being filtered out of a list.
+
+Verified live on tartinebakery.com: unticking Instagram and ticking Nextdoor
+rebuilt to a Reddit + Nextdoor plan with new cadences and experiments.
+
+### What it produced
+
+Positioning refused to flatter: *"Their homepage copy doesn't actually establish
+a difference - 'a thoughtful expression of modern craft' is the same line every
+artisanal bakery uses. The one real point of difference - that they published the
+book that taught home bakers the open-crumb country loaf - is buried under three
+competing cake-ordering CTAs."*
+
+North star: Goldbelly shipping orders, 40/week by week 6, with a stated
+consequence if it misses. ICP: "Home sourdough baker who owns Tartine Bread and
+treats the recipe like scripture", found at r/Sourdough, r/Breadit and The
+Perfect Loaf newsletter. The plan then opened on **Reddit** - which follows
+directly from those named places, and is not where a generic playbook would send
+a bakery.
+
+Cost is now about **18 cents per brand** end to end, up from 9: extraction ~5c,
+audience ~3c, competitors ~6c (the web search call is the most expensive), plan
+~3c, generation ~1c. Time to a full plan is about 100 seconds, up from 77 - the
+market stage adds roughly 23 seconds of wall clock because it overlaps
+everything else.
 
 ---
 

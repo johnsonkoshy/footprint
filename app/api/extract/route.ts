@@ -49,6 +49,7 @@ export async function POST(req: Request) {
               screenshot: site.screenshot ? `data:image/png;base64,${site.screenshot}` : null,
               logo: site.logo,
               signals,
+              text: site.text,
               degraded: site.degraded,
               ms: Date.now() - startedAt,
             });

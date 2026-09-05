@@ -2,18 +2,31 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BrandKit, ContentSet, MarketingPlan, SiteSignals, TemplateId } from "@/types";
+import type {
+  Audience,
+  BrandKit,
+  Competitors,
+  ContentSet,
+  MarketingPlan,
+  SiteSignals,
+  TemplateId,
+} from "@/types";
 import {
   extractStream,
+  findCompetitors,
   generate,
+  readAudience,
+  rebuildPlan,
   renderPng,
   strategize,
   type Brief,
   type CaptureEvent,
   type ExtractResponse,
 } from "@/lib/client";
+import { planBodyOf } from "@/lib/strategy/rebuild";
 import { BrandStage } from "@/components/stages/BrandStage";
 import { FootprintStage } from "@/components/stages/FootprintStage";
+import { MarketStage } from "@/components/stages/MarketStage";
 import { PlanStage } from "@/components/stages/PlanStage";
 import { PostStage } from "@/components/stages/PostStage";
 import { Canvas } from "@/components/Canvas";
@@ -41,6 +54,12 @@ export function Viewer() {
   const [meta, setMeta] = useState<Omit<ExtractResponse, "kit"> | null>(null);
 
   const [signals, setSignals] = useState<SiteSignals | null>(null);
+  const [siteText, setSiteText] = useState("");
+  const [audience, setAudience] = useState<Audience | null>(null);
+  const [audienceWorking, setAudienceWorking] = useState(false);
+  const [marketElapsed, setMarketElapsed] = useState(0);
+  const [competitors, setCompetitors] = useState<Competitors | null>(null);
+  const [competitorsWorking, setCompetitorsWorking] = useState(false);
   const [plan, setPlan] = useState<MarketingPlan | null>(null);
   const [planning, setPlanning] = useState(false);
   const [planElapsed, setPlanElapsed] = useState(0);
@@ -51,6 +70,11 @@ export function Viewer() {
   const [topicIndex, setTopicIndex] = useState(0);
   const [topic, setTopic] = useState("");
   const [brief, setBrief] = useState<Brief | undefined>(undefined);
+  // What the founder has ticked. Seeded from the plan's own recommendation, so
+  // accepting our advice costs zero clicks and overriding it costs one.
+  const [pickedChannels, setPickedChannels] = useState<string[]>([]);
+  const [pickedFormats, setPickedFormats] = useState<string[]>([]);
+  const [rebuilding, setRebuilding] = useState(false);
 
   const [content, setContent] = useState<ContentSet | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -101,12 +125,15 @@ export function Viewer() {
     try {
       sessionStorage.setItem(
         STORE_KEY,
-        JSON.stringify({ url, kit, meta, capture, signals, plan, channel, goal, brief, topicIndex, topic, content, template }),
+        JSON.stringify({
+          url, kit, meta, capture, signals, siteText, audience, competitors,
+          plan, channel, goal, brief, topicIndex, topic, content, template,
+        }),
       );
     } catch {
       /* quota or private mode - state just won't survive a refresh */
     }
-  }, [url, kit, meta, capture, signals, plan, channel, goal, brief, topicIndex, topic, content, template]);
+  }, [url, kit, meta, capture, signals, siteText, audience, competitors, plan, channel, goal, brief, topicIndex, topic, content, template]);
 
   useEffect(() => {
     fetch("/api/publish")
@@ -125,6 +152,13 @@ export function Viewer() {
   }, [extracting]);
 
   useEffect(() => {
+    if (!audienceWorking) return;
+    const started = Date.now();
+    const id = setInterval(() => setMarketElapsed((Date.now() - started) / 1000), 250);
+    return () => clearInterval(id);
+  }, [audienceWorking]);
+
+  useEffect(() => {
     if (!planning) return;
     const started = Date.now();
     const id = setInterval(() => setPlanElapsed((Date.now() - started) / 1000), 250);
@@ -133,16 +167,20 @@ export function Viewer() {
 
   // ---------- the process ----------
   const runPlan = useCallback(
-    async (k: BrandKit, s: SiteSignals | null, g: string) => {
+    async (k: BrandKit, s: SiteSignals | null, g: string, a?: Audience | null) => {
       setPlanning(true);
       setPlanElapsed(0);
       setPlanError(null);
       try {
-        const res = await strategize(k, url.trim(), s, g);
+        const res = await strategize(k, url.trim(), s, g, a);
         setPlan(res.plan);
         setSignals(res.signals);
         setPlanNotes(res.usedFallback ? res.notes : []);
         setChannel(res.plan.channels.find((c) => c.move === "start-here")?.name ?? "");
+        setPickedChannels(
+          res.plan.channels.filter((c) => c.move === "start-here" || c.move === "next").map((c) => c.name),
+        );
+        setPickedFormats(res.plan.contentTypes.map((c) => c.name));
         setTopicIndex(0);
         setTopic(res.plan.contentTypes[0]?.topic ?? "");
       } catch (err) {
@@ -163,6 +201,8 @@ export function Viewer() {
     setKit(null);
     setMeta(null);
     setSignals(null);
+    setAudience(null);
+    setCompetitors(null);
     setPlan(null);
     setPlanError(null);
     setBrief(undefined);
@@ -177,13 +217,74 @@ export function Viewer() {
       });
       setKit(k);
       setMeta(rest);
+      setSiteText(rest.text);
       setPhase("ready");
-      // Longer than the extraction was, so start it now: the user reads the
-      // brand and the evidence while it runs instead of waiting twice.
-      runPlan(k, rest.signals, "");
+      runMarket(k, rest.signals, rest.text);
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
       setPhase("failed");
+    }
+  };
+
+  /**
+   * Both halves of the market read fire together, and the plan waits only on
+   * the fast one. Competitor research runs live web searches and is the
+   * longest call in the app; nothing downstream needs it, so it is allowed to
+   * land whenever it lands.
+   */
+  const runMarket = useCallback(
+    (k: BrandKit, s: SiteSignals, text: string) => {
+      setAudienceWorking(true);
+      setMarketElapsed(0);
+      setCompetitorsWorking(true);
+      setAudience(null);
+      setCompetitors(null);
+
+      readAudience(k, s, text)
+        .then((res) => {
+          setAudience(res.audience);
+          runPlan(k, s, "", res.audience);
+        })
+        .catch(() => runPlan(k, s, "", null))
+        .finally(() => setAudienceWorking(false));
+
+      findCompetitors(k, text)
+        .then((res) => setCompetitors(res.data))
+        .catch((err) =>
+          setCompetitors({ competitors: [], note: `Couldn't research the field. ${String(err instanceof Error ? err.message : err)}` }),
+        )
+        .finally(() => setCompetitorsWorking(false));
+    },
+    [runPlan],
+  );
+
+  const runRebuild = async () => {
+    if (!kit || !plan || !pickedChannels.length || !pickedFormats.length) return;
+    setRebuilding(true);
+    setPlanError(null);
+    try {
+      const previous = planBodyOf(plan);
+      const res = await rebuildPlan({
+        kit,
+        audience,
+        // Send them in the plan's own order so "first" means something.
+        channels: plan.channels.filter((c) => pickedChannels.includes(c.name)).map((c) => c.name),
+        formats: plan.contentTypes.filter((c) => pickedFormats.includes(c.name)).map((c) => c.name),
+        goal,
+        previous,
+      });
+      const next = { audit: plan.audit, ...res.plan };
+      setPlan(next);
+      setPlanNotes(res.usedFallback ? res.notes : []);
+      setPickedChannels(next.channels.map((c) => c.name));
+      setPickedFormats(next.contentTypes.map((c) => c.name));
+      setChannel(next.channels[0]?.name ?? "");
+      setTopicIndex(0);
+      setTopic(next.contentTypes[0]?.topic ?? "");
+    } catch (err) {
+      setPlanError(String(err instanceof Error ? err.message : err));
+    } finally {
+      setRebuilding(false);
     }
   };
 
@@ -204,7 +305,7 @@ export function Viewer() {
   /** Choosing a brief and pressing the button is the approval. Nothing is written before this. */
   const writePost = () => {
     if (!plan) return;
-    const picked = plan.channels.find((c) => c.name === channel);
+    const picked = plan.channels.find((c) => c.name === effectiveChannel);
     const next: Brief = { channel: picked?.name, format: plan.contentTypes[topicIndex]?.name, cadence: picked?.cadence };
     setBrief(next);
     runGenerate({ brief: next });
@@ -237,6 +338,7 @@ export function Viewer() {
     if (plan && !content) planRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [plan, content]);
 
+
   const sendPost = async () => {
     if (!imgUrl || !content) return;
     setPublishing(true);
@@ -262,15 +364,33 @@ export function Viewer() {
     phase === "failed" ? "error" : extracting ? "working" : kit ? "done" : "pending";
   const footprintStatus: StageStatus =
     plan ? "done" : signals || extracting ? "working" : "pending";
+  const marketStatus: StageStatus =
+    audience ? "done" : audienceWorking ? "working" : "pending";
   const planStatus: StageStatus =
     planError ? "error" : plan ? "done" : planning ? "working" : "pending";
   const postStatus: StageStatus = content ? "done" : generating ? "working" : "pending";
+
+  // The plan on screen was written for a different selection than the one ticked.
+  const planChannels = plan?.channels.filter((c) => c.move !== "skip").map((c) => c.name) ?? [];
+  const planFormats = plan?.contentTypes.map((c) => c.name) ?? [];
+  const sameSet = (a: string[], b: string[]) =>
+    a.length === b.length && a.every((x) => b.includes(x));
+  const selectionDirty =
+    Boolean(plan) && !(sameSet(pickedChannels, planChannels) && sameSet(pickedFormats, planFormats));
+
+  /**
+   * Unticking the channel we were about to write for would otherwise leave the
+   * button naming a channel the founder just rejected. Derived rather than
+   * synced in an effect - there is no second render and nothing to get stale.
+   */
+  const effectiveChannel = pickedChannels.includes(channel) ? channel : (pickedChannels[0] ?? "");
 
   const canvasMode = imgUrl || content ? "post" : capture?.screenshot ? "screenshot" : "empty";
 
   const steps: { label: string; state: "done" | "now" | "todo" }[] = [
     { label: "Brand", state: kit ? "done" : extracting ? "now" : "todo" },
-    { label: "Footprint", state: plan ? "done" : signals ? "now" : "todo" },
+    { label: "Footprint", state: signals && audience ? "done" : signals ? "now" : "todo" },
+    { label: "Market", state: audience ? "done" : audienceWorking ? "now" : "todo" },
     { label: "Plan", state: brief ? "done" : plan ? "now" : "todo" },
     { label: "Post", state: imgUrl ? "done" : generating ? "now" : "todo" },
   ];
@@ -368,6 +488,14 @@ export function Viewer() {
 
           <FootprintStage status={footprintStatus} signals={signals} plan={plan} />
 
+          <MarketStage
+            status={marketStatus}
+            audience={audience}
+            competitors={competitors}
+            competitorsWorking={competitorsWorking}
+            elapsed={marketElapsed}
+          />
+
           <div ref={planRef}>
             <PlanStage
               status={planStatus}
@@ -375,8 +503,7 @@ export function Viewer() {
               plan={plan}
               notes={planNotes}
               error={planError}
-              channel={channel}
-              onChannelChange={setChannel}
+              channel={effectiveChannel}
               topicIndex={topicIndex}
               onTopicIndexChange={(i) => {
                 setTopicIndex(i);
@@ -386,10 +513,25 @@ export function Viewer() {
               onTopicChange={setTopic}
               goal={goal}
               onGoalChange={setGoal}
-              onReplan={() => kit && runPlan(kit, signals, goal)}
+              onReplan={() => kit && runPlan(kit, signals, goal, audience)}
               onWrite={writePost}
               writing={generating}
-              onRetry={() => kit && runPlan(kit, signals, goal)}
+              onRetry={() => kit && runPlan(kit, signals, goal, audience)}
+              pickedChannels={pickedChannels}
+              onToggleChannel={(name) =>
+                setPickedChannels((prev) =>
+                  prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+                )
+              }
+              pickedFormats={pickedFormats}
+              onToggleFormat={(name) =>
+                setPickedFormats((prev) =>
+                  prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+                )
+              }
+              onRebuild={runRebuild}
+              rebuilding={rebuilding}
+              dirty={selectionDirty}
             />
           </div>
 

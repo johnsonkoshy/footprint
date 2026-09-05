@@ -40,6 +40,9 @@ export const GENERATE_MODEL = pick(process.env.GENERATE_MODEL, "claude-sonnet-5"
 // Strategy is judgement over evidence we hand it, with no image to read, so it
 // sits with generation rather than extraction.
 export const STRATEGY_MODEL = pick(process.env.STRATEGY_MODEL, "claude-sonnet-5");
+// Audience reasoning and competitor research. The competitor half runs web
+// search, so this is the one call that reaches the open internet.
+export const MARKET_MODEL = pick(process.env.MARKET_MODEL, "claude-sonnet-5");
 
 export function getClient(): Anthropic {
   if (!hasApiKey()) throw new Error(MISSING_KEY_MESSAGE);

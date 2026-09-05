@@ -146,6 +146,87 @@ export const EMPTY_SIGNALS: SiteSignals = {
   degraded: true,
 };
 
+/* ------------------------------------------------------------------ *
+ * Stage 2.6: who buys this, who else sells it, what number proves it
+ *
+ * Footprint says what this company has already done. For an early-stage
+ * founder that is nearly always "nothing", which is true but thin. What they
+ * actually lack is a named buyer, a read on the field, and one number to
+ * chase. That is this stage.
+ *
+ * Split in two because the two halves have completely different costs:
+ * Audience is read off their own copy in ~20s, Competitors needs live web
+ * search and takes minutes. They arrive separately and the UI shows each as
+ * it lands.
+ * ------------------------------------------------------------------ */
+
+export const AudienceSchema = z.object({
+  /** Read off the evidence, not asked of the founder. */
+  stage: z
+    .enum(["pre-launch", "just-launched", "early-traction"])
+    .describe("pre-launch = no product signal; just-launched = live but no audience; early-traction = real users"),
+  positioning: z
+    .string()
+    .describe("One line in their own register: for WHO, we do WHAT, unlike WHAT ELSE. Under 140 characters"),
+  icp: z.array(
+    z.object({
+      name: z.string().describe("A person, not a market. 'Solo ceramicist selling at weekend markets', not 'SMBs'"),
+      signals: z.array(z.string()).describe("Up to 3 ways to recognise one in the wild, each under 70 characters"),
+      pain: z.string().describe("One sentence: the specific thing that makes them pull out a card"),
+      where: z
+        .array(z.string())
+        .describe("Up to 3 named places they already gather - a subreddit, a Slack, a conference, a newsletter. Never 'social media'"),
+    }),
+  ),
+  kpis: z.object({
+    northStar: z.object({
+      metric: z.string().describe("The single number. Under 40 characters"),
+      target: z.string().describe("Absolute and time-boxed. A founder has no baseline, so never '+15%'"),
+      why: z.string().describe("One sentence: what you would do differently if it missed"),
+    }),
+    supporting: z.array(
+      z.object({
+        metric: z.string(),
+        target: z.string().describe("Absolute and time-boxed"),
+        why: z.string().describe("One sentence"),
+      }),
+    ),
+  }),
+});
+
+export type Audience = z.infer<typeof AudienceSchema>;
+
+export const CompetitorsSchema = z.object({
+  competitors: z.array(
+    z.object({
+      name: z.string(),
+      url: z.string().describe("A real URL seen in search results, never guessed"),
+      positioning: z.string().describe("One sentence, how they sell themselves"),
+      theirEdge: z.string().describe("One sentence: what they genuinely do better"),
+      yourOpening: z.string().describe("One sentence: the gap a small newcomer could take from them"),
+    }),
+  ),
+  /** Honest when search found little - an empty list with a reason beats invented rivals. */
+  note: z.string().describe("If search returned nothing useful, say so plainly here. Otherwise empty string"),
+});
+
+export type Competitors = z.infer<typeof CompetitorsSchema>;
+
+export const DEFAULT_AUDIENCE: Audience = {
+  stage: "pre-launch",
+  positioning: "",
+  icp: [],
+  kpis: {
+    northStar: { metric: "Customer conversations", target: "20 in the next 30 days", why: "Below this you are guessing at the problem" },
+    supporting: [],
+  },
+};
+
+export const DEFAULT_COMPETITORS: Competitors = {
+  competitors: [],
+  note: "We could not research the field for this company.",
+};
+
 export const MarketingPlanSchema = z.object({
   audit: z.object({
     maturity: z
@@ -203,13 +284,6 @@ export const MarketingPlanSchema = z.object({
       deliverables: z.array(z.string()).describe("Up to 3 countable things, each under 70 characters"),
     }),
   ),
-  kpis: z.array(
-    z.object({
-      metric: z.string().describe("Short name, under 40 characters"),
-      target: z.string().describe("A number with a timeframe, not 'increase'"),
-      why: z.string().describe("One sentence: what decision this number would change"),
-    }),
-  ),
 });
 
 export type MarketingPlan = z.infer<typeof MarketingPlanSchema>;
@@ -227,5 +301,4 @@ export const DEFAULT_MARKETING_PLAN: MarketingPlan = {
   contentTypes: [],
   experiments: [],
   timeline: [],
-  kpis: [],
 };

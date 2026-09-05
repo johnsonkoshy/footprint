@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { BrandKitSchema, SiteSignalsSchema, EMPTY_SIGNALS } from "@/types";
+import { AudienceSchema, BrandKitSchema, SiteSignalsSchema, EMPTY_SIGNALS } from "@/types";
 import { probeSurfaces } from "@/lib/strategy/signals";
 import { buildStrategy } from "@/lib/strategy";
 
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  let body: { kit?: unknown; url?: unknown; signals?: unknown; goal?: unknown };
+  let body: { kit?: unknown; url?: unknown; signals?: unknown; goal?: unknown; audience?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -33,10 +33,12 @@ export async function POST(req: Request) {
   const signals = await probeSurfaces(body.url.trim(), parsed.success ? parsed.data : EMPTY_SIGNALS);
   const probedAt = Date.now();
 
+  const audience = AudienceSchema.safeParse(body.audience);
   const result = await buildStrategy(
     kit.data,
     signals,
     typeof body.goal === "string" ? body.goal : "",
+    audience.success ? audience.data : null,
   );
 
   return NextResponse.json({

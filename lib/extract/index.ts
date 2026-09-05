@@ -155,6 +155,8 @@ function coerceKit(
 export type ExtractionResult = {
   /** Free marketing-footprint read from the same page load. Probes come later. */
   signals: SiteSignals;
+  /** The homepage copy. The market stage reads their buyer out of this. */
+  text: string;
   kit: BrandKit;
   /** true when both attempts failed validation and we served DEFAULT_BRAND_KIT */
   usedFallback: boolean;
@@ -209,6 +211,7 @@ export async function extractBrandKit(
       },
       notes,
       signals,
+      text: site.text,
     };
   }
 
@@ -266,6 +269,7 @@ export async function extractBrandKit(
           notes,
           usage,
           signals,
+          text: site.text,
         };
       }
 
@@ -296,5 +300,6 @@ export async function extractBrandKit(
     notes,
     usage,
     signals,
+    text: site.text,
   };
 }

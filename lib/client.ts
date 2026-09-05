@@ -1,10 +1,19 @@
-import type { BrandKit, ContentSet, MarketingPlan, SiteSignals, TemplateId } from "@/types";
+import type {
+  Audience,
+  BrandKit,
+  Competitors,
+  ContentSet,
+  MarketingPlan,
+  SiteSignals,
+  TemplateId,
+} from "@/types";
 
 /** Shared browser-side calls. Kept out of components so /compare can reuse them. */
 
 export type ExtractResponse = {
   kit: BrandKit;
   signals: SiteSignals;
+  text: string;
   usedFallback: boolean;
   degraded: boolean;
   fonts: { display: { requested: string; google: string }; body: { requested: string; google: string } };
@@ -30,6 +39,7 @@ export type CaptureEvent = {
   screenshot: string | null;
   logo: BrandKit["logo"];
   signals: SiteSignals;
+  text: string;
   degraded: boolean;
   ms: number;
 };
@@ -98,6 +108,61 @@ export async function generate(
   return json.content;
 }
 
+export type AudienceResponse = {
+  audience: Audience;
+  usedFallback: boolean;
+  notes: string[];
+  ms: number;
+};
+
+export type CompetitorsResponse = {
+  data: Competitors;
+  usedFallback: boolean;
+  notes: string[];
+  searches: number;
+  ms: number;
+};
+
+async function post<T>(path: string, body: unknown, label: string): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? `${label} failed (${res.status})`);
+  return json;
+}
+
+/** Fast: no web search, reads their own copy. The plan waits on this one. */
+export function readAudience(kit: BrandKit, signals: SiteSignals, text: string) {
+  return post<AudienceResponse>("/api/market/audience", { kit, signals, text }, "Audience");
+}
+
+/** Slow: live web search. Nothing downstream waits on it. */
+export function findCompetitors(kit: BrandKit, text: string) {
+  return post<CompetitorsResponse>("/api/market/competitors", { kit, text }, "Competitor research");
+}
+
+export type RebuildResponse = {
+  plan: Omit<MarketingPlan, "audit">;
+  usedFallback: boolean;
+  notes: string[];
+  ms: number;
+};
+
+/** The founder picked channels and formats; write the plan for exactly those. */
+export function rebuildPlan(args: {
+  kit: BrandKit;
+  audience: Audience | null;
+  channels: string[];
+  formats: string[];
+  goal: string;
+  previous: Omit<MarketingPlan, "audit">;
+}) {
+  return post<RebuildResponse>("/api/plan", args, "Plan");
+}
+
 export type StrategyResponse = {
   plan: MarketingPlan;
   signals: SiteSignals;
@@ -108,20 +173,14 @@ export type StrategyResponse = {
   probeMs: number;
 };
 
-export async function strategize(
+export function strategize(
   kit: BrandKit,
   url: string,
   signals: SiteSignals | null,
   goal = "",
+  audience?: Audience | null,
 ): Promise<StrategyResponse> {
-  const res = await fetch("/api/strategy", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kit, url, signals, goal }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error ?? `Strategy failed (${res.status})`);
-  return json;
+  return post<StrategyResponse>("/api/strategy", { kit, url, signals, goal, audience }, "Strategy");
 }
 
 /** Returns an object URL for the rendered PNG. Caller revokes it. */

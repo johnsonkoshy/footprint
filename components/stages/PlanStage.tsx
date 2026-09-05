@@ -23,7 +23,6 @@ export function PlanStage({
   notes,
   error,
   channel,
-  onChannelChange,
   topicIndex,
   onTopicIndexChange,
   topic,
@@ -34,6 +33,13 @@ export function PlanStage({
   onWrite,
   writing,
   onRetry,
+  pickedChannels,
+  onToggleChannel,
+  pickedFormats,
+  onToggleFormat,
+  onRebuild,
+  rebuilding,
+  dirty,
 }: {
   status: StageStatus;
   elapsed: number;
@@ -41,7 +47,6 @@ export function PlanStage({
   notes: string[];
   error: string | null;
   channel: string;
-  onChannelChange: (v: string) => void;
   topicIndex: number;
   onTopicIndexChange: (i: number) => void;
   topic: string;
@@ -52,13 +57,20 @@ export function PlanStage({
   onWrite: () => void;
   writing: boolean;
   onRetry: () => void;
+  pickedChannels: string[];
+  onToggleChannel: (name: string) => void;
+  pickedFormats: string[];
+  onToggleFormat: (name: string) => void;
+  onRebuild: () => void;
+  rebuilding: boolean;
+  /** The selection no longer matches the plan on screen. */
+  dirty: boolean;
 }) {
   const [why, setWhy] = useState(false);
   const [changing, setChanging] = useState(false);
 
-  const start = plan?.channels.find((c) => c.move === "start-here");
-  const rest = plan?.channels.filter((c) => c.move === "next" || c.move === "later") ?? [];
-  const skipped = plan?.channels.filter((c) => c.move === "skip") ?? [];
+  // Ordered by the plan, filtered to what the founder actually ticked.
+  const selectedChannels = plan?.channels.filter((c) => pickedChannels.includes(c.name)) ?? [];
 
   const meta =
     status === "working"
@@ -107,28 +119,53 @@ export function PlanStage({
             </p>
           ) : null}
 
-          {/* ---- the channel decision, as one sentence with clickable parts ---- */}
-          <p className="text-sm leading-relaxed text-zinc-700">
-            Start on{" "}
-            {start ? <ChannelPick name={start.name} selected={channel === start.name} onPick={onChannelChange} /> : null}
-            {start ? <span className="text-zinc-500">, {start.cadence.toLowerCase()}</span> : null}
-            {rest.length ? (
-              <>
-                <span className="text-zinc-500"> · then </span>
-                {rest.map((c, i) => (
-                  <span key={c.name}>
-                    {i > 0 ? <span className="text-zinc-500">, </span> : null}
-                    <ChannelPick name={c.name} selected={channel === c.name} onPick={onChannelChange} />
-                  </span>
-                ))}
-              </>
-            ) : null}
-            {skipped.length ? (
-              <span className="text-zinc-400"> · skip {skipped.map((c) => c.name).join(", ")}</span>
-            ) : null}
-          </p>
+          {/*
+            The plan proposed this, but the founder knows their buyer better
+            than we do. Everything here is a checkbox: uncheck a channel we
+            recommended, check one we skipped, and the plan gets rewritten for
+            what they actually chose.
+          */}
+          <div>
+            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
+              Where you&apos;ll post
+            </h3>
+            <ul className="flex flex-wrap gap-1.5">
+              {plan.channels.map((c) => {
+                const on = pickedChannels.includes(c.name);
+                const advised = c.move === "start-here" || c.move === "next";
+                return (
+                  <li key={c.name}>
+                    <button
+                      onClick={() => onToggleChannel(c.name)}
+                      aria-pressed={on}
+                      title={c.rationale}
+                      className={`rounded-full border px-3 py-1 text-sm transition ${
+                        on
+                          ? "border-zinc-900 bg-zinc-900 text-white"
+                          : "border-zinc-200 text-zinc-500 hover:border-zinc-400"
+                      }`}
+                    >
+                      {c.name}
+                      {advised ? null : <span className={on ? "text-zinc-400" : "text-zinc-300"}> ·  we&apos;d skip</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {selectedChannels.length ? (
+              <p className="mt-2 text-sm text-zinc-500">
+                {selectedChannels[0].name} first, {selectedChannels[0].cadence.toLowerCase()}
+                {selectedChannels.length > 1 ? ` · then ${selectedChannels.slice(1).map((c) => c.name).join(", ")}` : ""}
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-amber-700">Pick at least one channel.</p>
+            )}
+          </div>
 
           {/* ---- the post decision ---- */}
+          <h3 className="-mb-1 text-xs font-medium uppercase tracking-wider text-zinc-400">
+            What you&apos;ll make
+          </h3>
           <ul className="flex flex-col gap-2">
             {plan.contentTypes.map((ct, i) => {
               const selected = topicIndex === i;
@@ -144,7 +181,32 @@ export function PlanStage({
                       aria-pressed={selected}
                       className="w-full px-3 py-2.5 text-left"
                     >
-                      <span className="block text-sm font-medium">{ct.name}</span>
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <span
+                          role="checkbox"
+                          aria-checked={pickedFormats.includes(ct.name)}
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFormat(ct.name);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === " " || e.key === "Enter") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onToggleFormat(ct.name);
+                            }
+                          }}
+                          className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] leading-none ${
+                            pickedFormats.includes(ct.name)
+                              ? "border-zinc-900 bg-zinc-900 text-white"
+                              : "border-zinc-300"
+                          }`}
+                        >
+                          {pickedFormats.includes(ct.name) ? "✓" : ""}
+                        </span>
+                        {ct.name}
+                      </span>
                       {selected ? null : (
                         <span className="mt-0.5 block text-sm text-zinc-500">{ct.topic}</span>
                       )}
@@ -187,6 +249,22 @@ export function PlanStage({
             </div>
           ) : null}
 
+          {dirty ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-900 px-3 py-2.5 text-sm text-white">
+              <span>
+                {pickedChannels.length || 0} channel{pickedChannels.length === 1 ? "" : "s"},{" "}
+                {pickedFormats.length} format{pickedFormats.length === 1 ? "" : "s"} — the plan below is still the old one
+              </span>
+              <button
+                onClick={onRebuild}
+                disabled={rebuilding || !pickedChannels.length || !pickedFormats.length}
+                className="rounded-lg bg-white px-3 py-1.5 font-medium text-zinc-900 disabled:opacity-40"
+              >
+                {rebuilding ? "Rewriting…" : "Rebuild the plan"}
+              </button>
+            </div>
+          ) : null}
+
           <div className="flex items-center justify-between gap-3">
             <button onClick={() => setWhy((v) => !v)} className="text-sm text-zinc-500 hover:text-zinc-900">
               <span aria-hidden className="mr-1 inline-block transition-transform" style={{ transform: why ? "rotate(90deg)" : "none" }}>
@@ -207,20 +285,6 @@ export function PlanStage({
         </div>
       ) : null}
     </Stage>
-  );
-}
-
-function ChannelPick({ name, selected, onPick }: { name: string; selected: boolean; onPick: (v: string) => void }) {
-  return (
-    <button
-      onClick={() => onPick(name)}
-      aria-pressed={selected}
-      className={`rounded px-1 font-medium underline-offset-2 ${
-        selected ? "bg-zinc-900 text-white" : "text-zinc-900 hover:underline"
-      }`}
-    >
-      {name}
-    </button>
   );
 }
 
@@ -252,21 +316,6 @@ function Why({ plan }: { plan: MarketingPlan }) {
                 <p className="mt-1 text-xs text-zinc-500">
                   <span className="font-medium text-zinc-600">Read out: </span>{e.readout}
                 </p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {plan.kpis.length ? (
-        <div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">What to measure</h3>
-          <ul className="space-y-2">
-            {plan.kpis.map((k) => (
-              <li key={k.metric} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-medium">{k.metric}</span>
-                <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs">{k.target}</span>
-                <span className="w-full text-xs text-zinc-500">{k.why}</span>
               </li>
             ))}
           </ul>

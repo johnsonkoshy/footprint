@@ -180,6 +180,73 @@ Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
 
 ---
 
+## The instrument
+
+Asked for "futuristic, from a founder's perspective". The trap in that brief:
+neon, glass and glowing HUD lines would fight every brand we render - Notion's
+cream serif inside a cyberpunk shell - and the product's one principle is that
+the chrome stays grey so the brand is the only colour. So the redesign earns
+the feeling through precision and behaviour, not decoration. The reference is
+an instrument, not a form.
+
+**Mono for what was measured, sans for what was reasoned.** Two utilities,
+`label` and `readout`, both Geist Mono. Every hex, timing, count, target,
+cadence and URL is a readout; every section name is a label; positioning,
+rationale and briefs stay in the sans. The typeface itself tells a founder
+which parts are fact and which are judgement.
+
+**A live log instead of skeletons.** `RunLog` shows the process narrating
+itself with real elapsed times - `00:06 homepage captured · 2 social · 3
+surfaces · marketo`, `00:17 palette read · #635BFF · söhne`, `01:04 plan
+written · active · youtube first`. Every line is an event that happened, at the
+second it happened. The last entry can be live, marked with the one non-grey in
+the chrome. This is the single biggest contributor to the feel.
+
+**The stage takes the brand's own surface.** The canvas is tinted with the
+brand primary at 10% - the one deliberate place brand colour touches the
+chrome. Stripe's stage is faintly indigo, Tartine's faintly amber.
+
+**No cards.** Hairline rules and mono labels; a left rule marks the chapter
+asking for a decision and the selected brief. Content sits on the page.
+
+**Founder verbs.** Read · Know · Decide · Ship replaces Brand / Market / Plan
+/ Post - what you do at each step, not what the tool emits.
+
+Kept: the one-screen wizard, canvas beside, decisions-first plan, both themes.
+A reskin plus two behaviours, not another architecture rewrite.
+
+### What the compiler caught
+
+`runExtract`, a plain render-scope function, wrote a ref and called
+`Date.now()`; and `primary`, the footer action, was an IIFE executed during
+render whose closures reached `mark`, which read the clock ref - so the
+compiler attributed a ref read to render. Turning the IIFE into a conditional
+chain moved the error without removing it, because the object still carried a
+ref-reaching handler into JSX. The real fix removed the ref: the run's start
+time lives inside the log state and elapsed is computed in the updater.
+Nothing render can reach touches a ref.
+
+### The theme script had to go
+
+The inline theme `<script>` produced a React error on every client-side
+navigation - React re-renders it and warns it will never execute - and moving
+it to `next/script` did not change that, since React still renders the
+element. The fix removes the script entirely. An explicit choice is a cookie;
+the root layout reads it on the server and renders the class straight onto
+`<html>`, so there is no flash and nothing to run before paint. "Auto" is pure
+CSS via `prefers-color-scheme`. With no script mutating `<html>`,
+`suppressHydrationWarning` lost its justification and is gone again; the
+extension-attribute mismatch it would also have hidden remains the browser
+extension's doing, not ours.
+
+Contrast was re-measured in both modes after the restyle. The step numerals
+and the log timestamps had drifted to `ink-faint`, a line colour, and measured
+2.6-2.8:1; both moved to `ink-mute`. One apparent failure - the theme toggle at
+2.06:1 in light - was a sampling artefact from mid-transition; it reads 7.73:1
+settled.
+
+---
+
 ## Dark mode
 
 CLAUDE.md lists dark mode as explicitly out of scope. Built on request anyway;

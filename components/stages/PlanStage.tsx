@@ -129,7 +129,7 @@ export function PlanStage({
             what they actually chose.
           */}
           <div>
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">
+            <h3 className="label mb-2">
               Where you&apos;ll post
             </h3>
             <ul className="flex flex-wrap gap-1.5">
@@ -143,10 +143,10 @@ export function PlanStage({
                       onClick={() => onToggleChannel(c.name)}
                       aria-pressed={on}
                       title={c.rationale}
-                      className={`rounded-full border px-3 py-1 text-sm transition ${
+                      className={`label rounded border px-2.5 py-1 transition ${
                         on
                           ? "border-ink bg-invert text-invert-fg"
-                          : "border-line text-ink-soft hover:border-line-strong"
+                          : "border-line text-ink-soft hover:border-ink hover:text-ink"
                       }`}
                     >
                       {c.name}
@@ -169,7 +169,7 @@ export function PlanStage({
           </div>
 
           {/* ---- the post decision ---- */}
-          <h3 className="-mb-1 text-xs font-medium uppercase tracking-wider text-ink-mute">
+          <h3 className="label -mb-1">
             What you&apos;ll make
           </h3>
           <ul className="flex flex-col gap-2">
@@ -178,8 +178,8 @@ export function PlanStage({
               return (
                 <li key={ct.name}>
                   <div
-                    className={`rounded-lg border transition ${
-                      selected ? "border-ink bg-raised" : "border-line hover:border-line-strong"
+                    className={`border-l-2 transition ${
+                      selected ? "border-ink" : "border-line hover:border-line-strong"
                     }`}
                   >
                     <button
@@ -274,7 +274,7 @@ export function PlanStage({
           ) : null}
 
           {dirty ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-invert px-3 py-2.5 text-sm text-invert-fg">
+            <div className="readout flex flex-wrap items-center justify-between gap-2 border-l-2 border-active pl-3 text-ink">
               <span>
                 {pickedChannels.length || 0} channel{pickedChannels.length === 1 ? "" : "s"},{" "}
                 {pickedFormats.length} format{pickedFormats.length === 1 ? "" : "s"} — the plan below is still the old one
@@ -282,9 +282,9 @@ export function PlanStage({
               <button
                 onClick={onRebuild}
                 disabled={rebuilding || !pickedChannels.length || !pickedFormats.length}
-                className="rounded-lg bg-surface px-3 py-1.5 font-medium text-ink disabled:opacity-40"
+                className="label rounded bg-invert px-3 py-1.5 text-invert-fg disabled:opacity-40"
               >
-                {rebuilding ? "Rewriting…" : "Rebuild the plan"}
+                {rebuilding ? "Rewriting" : "Rebuild the plan →"}
               </button>
             </div>
           ) : null}
@@ -299,9 +299,9 @@ export function PlanStage({
             <button
               onClick={onWrite}
               disabled={writing || !topic.trim()}
-              className="rounded-lg bg-invert px-4 py-2 text-sm font-medium text-invert-fg disabled:opacity-40"
+              className="label rounded bg-invert px-4 py-2 text-invert-fg disabled:opacity-40"
             >
-              {writing ? "Writing…" : `Write this post for ${channel || "them"}`}
+              {writing ? "Writing" : `Write for ${channel || "them"} →`}
             </button>
           </div>
 
@@ -316,7 +316,7 @@ function Why({ plan }: { plan: MarketingPlan }) {
   return (
     <div className="flex flex-col gap-5 border-t border-line-soft pt-4 text-sm">
       <div>
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">Channels, in order</h3>
+        <h3 className="label mb-2">Channels, in order</h3>
         <ul className="space-y-2">
           {plan.channels.map((c) => (
             <li key={c.name} className="text-ink-soft">
@@ -330,7 +330,7 @@ function Why({ plan }: { plan: MarketingPlan }) {
 
       {plan.experiments.length ? (
         <div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">Experiments</h3>
+          <h3 className="label mb-2">Experiments</h3>
           <ul className="space-y-3">
             {plan.experiments.map((e) => (
               <li key={e.name} className="rounded-lg bg-raised p-3">
@@ -348,7 +348,7 @@ function Why({ plan }: { plan: MarketingPlan }) {
 
       {plan.timeline.length ? (
         <div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">First quarter</h3>
+          <h3 className="label mb-2">First quarter</h3>
           <ol className="space-y-3">
             {plan.timeline.map((t) => (
               <li key={t.window} className="border-l-2 border-line pl-3">

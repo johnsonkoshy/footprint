@@ -49,10 +49,10 @@ export function FootprintStage({
           {/* Verdict, or the space it will occupy. */}
           {plan && maturity ? (
             <div>
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${maturity.className}`}>
+              <span className={`label rounded px-2 py-0.5 ring-1 ring-inset ${maturity.className}`}>
                 {maturity.label}
               </span>
-              <p className="mt-2 text-base font-medium leading-snug tracking-tight">{plan.audit.headline}</p>
+              <p className="mt-2 text-lg font-medium leading-snug tracking-tight text-ink">{plan.audit.headline}</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -61,17 +61,23 @@ export function FootprintStage({
             </div>
           )}
 
-          <div className="flex flex-wrap gap-1.5">
-            <Chip tone={signals.socials.length ? "neutral" : "quiet"}>
-              {signals.socials.length ? signals.socials.map((s) => s.platform).join(", ") : "No social accounts linked"}
-            </Chip>
-            <Chip tone={surfaces.length ? "neutral" : "quiet"}>
-              {surfaces.length ? surfaces.map((f) => f.label).join(", ") : "No content surfaces"}
-            </Chip>
-            <Chip tone={signals.martech.length ? "neutral" : "quiet"}>
-              {signals.martech.length ? signals.martech.map((m) => m.name).join(", ") : "No marketing tech detected"}
-            </Chip>
-            {signals.hasNewsletterCapture ? <Chip>Email capture</Chip> : null}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 border-t border-line-soft pt-3 sm:grid-cols-4">
+            <div className="flex flex-col gap-0.5"><span className="label">Social</span>
+              <Chip tone={signals.socials.length ? "neutral" : "quiet"}>
+                {signals.socials.length ? signals.socials.map((s) => s.platform.toLowerCase()).join(" · ") : "none linked"}
+              </Chip></div>
+            <div className="flex flex-col gap-0.5"><span className="label">Surfaces</span>
+              <Chip tone={surfaces.length ? "neutral" : "quiet"}>
+                {surfaces.length ? surfaces.map((f) => f.label.toLowerCase()).join(" · ") : "none"}
+              </Chip></div>
+            <div className="flex flex-col gap-0.5"><span className="label">Martech</span>
+              <Chip tone={signals.martech.length ? "neutral" : "quiet"}>
+                {signals.martech.length ? signals.martech.map((m) => m.name.toLowerCase()).join(" · ") : "none detected"}
+              </Chip></div>
+            <div className="flex flex-col gap-0.5"><span className="label">Capture</span>
+              <Chip tone={signals.hasNewsletterCapture ? "neutral" : "quiet"}>
+                {signals.hasNewsletterCapture ? "email" : "none"}
+              </Chip></div>
           </div>
 
           {open && plan ? (

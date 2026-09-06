@@ -30,7 +30,16 @@ export function Canvas({
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-sunken p-5 ring-1 ring-inset ring-line/70">
+      {/*
+        The one deliberate place brand colour touches the chrome: the stage is
+        tinted with the brand's primary at ~10%, so Stripe's is faintly indigo
+        and Tartine's faintly amber. Inline because it comes from brand.json;
+        "1A" is 10% alpha on a 6-digit hex, which the schema guarantees.
+      */}
+      <div
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg bg-sunken p-6 ring-1 ring-inset ring-line"
+        style={kit ? { backgroundColor: `${kit.palette.primary}1A` } : undefined}
+      >
         {mode === "empty" ? (
           <div className="flex max-h-full w-full flex-col items-center gap-4">
             <div className="grid w-full max-w-[420px] grid-cols-2 gap-3">
@@ -40,8 +49,8 @@ export function Canvas({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/api/render?fixture=notion&template=split" alt="Example post in Notion's brand" className="w-full rounded-md shadow-md ring-1 ring-line/5" />
             </div>
-            <p className="max-w-xs text-center text-sm text-ink-soft">
-              Same topic, two brands. This is what we make. Paste yours.
+            <p className="readout max-w-xs text-center text-ink-soft">
+              same topic · two brands · nobody typed a colour
             </p>
           </div>
         ) : null}
@@ -82,8 +91,8 @@ export function Canvas({
                 ))}
               </div>
             </div>
-            <figcaption className="text-sm text-ink-soft">
-              Read from {url}. Choose a post and this becomes the artwork.
+            <figcaption className="readout text-ink-soft">
+              read from {url} · choose a post and this becomes the artwork
             </figcaption>
           </figure>
         ) : null}
@@ -100,7 +109,7 @@ export function Canvas({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={screenshot} alt={`Homepage of ${url}`} className="block max-h-[52vh] w-full object-cover object-top" />
             </div>
-            <figcaption className="text-sm text-ink-soft">Reading it now. The palette is pulled off this page.</figcaption>
+            <figcaption className="readout text-ink-soft">reading it now · the palette is pulled off this page</figcaption>
           </figure>
         ) : null}
 
@@ -122,24 +131,25 @@ export function Canvas({
 
       {mode === "post" ? (
         <div className="flex shrink-0 items-center justify-between gap-3">
-          <div className="flex rounded-lg bg-sunken p-0.5">
+          <div className="flex gap-4">
             {(["statement", "split"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => onTemplate(t)}
-                className={`rounded-[6px] px-3 py-1.5 text-sm capitalize transition ${
-                  template === t ? "bg-surface font-medium shadow-sm" : "text-ink-soft"
+                aria-pressed={template === t}
+                className={`label border-b pb-0.5 transition ${
+                  template === t ? "border-ink text-ink" : "border-transparent text-ink-soft hover:text-ink"
                 }`}
               >
                 {t}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            {rendering ? <span className="text-xs text-ink-mute">redrawing…</span> : null}
+          <div className="flex items-center gap-4">
+            {rendering ? <span className="readout text-ink-mute">redrawing</span> : null}
             {imgUrl ? (
-              <a href={imgUrl} download="footprint-post.png" className="text-ink-soft underline-offset-2 hover:underline">
-                Download PNG
+              <a href={imgUrl} download="footprint-post.png" className="label text-ink-soft hover:text-ink">
+                PNG ↓
               </a>
             ) : null}
           </div>

@@ -85,6 +85,52 @@
   --active: #fbbf24;
 }
 
+/*
+ * "Auto" is pure CSS: when nothing has been chosen, follow the OS. An explicit
+ * choice is a class on <html>, rendered by the server from a cookie, so there
+ * is no script to run before paint and nothing for React to re-render on a
+ * client navigation. The dark palette appears twice because CSS cannot alias
+ * a declaration block; the two must be kept identical.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+
+    --page: #09090b;
+    --surface: #18181b;
+    --raised: #212124;
+    --sunken: #27272a;
+
+    --line-soft: #232326;
+    --line: #2f2f34;
+    --line-strong: #46464d;
+
+    --ink: #fafafa;
+    --ink-soft: #b4b4bb;
+    --ink-mute: #93939c;
+    --ink-faint: #5f5f68;
+
+    --invert-bg: #fafafa;
+    --invert-fg: #18181b;
+
+    /* Tinted near-black rather than the light ramp: a light banner on a dark page
+       glows and pulls the eye off the brand artwork it sits beside. */
+    --warn-bg: #2a1f05;
+    --warn-fg: #fcd34d;
+    --warn-line: #57430f;
+    --ok-bg: #052e22;
+    --ok-fg: #6ee7b7;
+    --ok-line: #10553f;
+    --danger-bg: #2c1113;
+    --danger-fg: #fca5a5;
+    --danger-line: #5d2124;
+    --info-bg: #0c2c47;
+    --info-fg: #7dd3fc;
+    --info-line: #17456b;
+    --active: #fbbf24;
+  }
+}
+
 @theme inline {
   --color-page: var(--page);
   --color-surface: var(--surface);
@@ -119,6 +165,39 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/*
+ * The instrument's two voices. Anything measured - a hex, a timing, a count, a
+ * target, a cadence - is a `readout`; section names are a `label`. Both are
+ * mono. Prose stays in the sans. The typeface itself tells a founder which
+ * parts are fact and which are judgement.
+ */
+@utility label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+@utility readout {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+/* Log lines and landed values rise in rather than appear. Short, and off for
+   anyone who has asked their OS for less motion. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@utility rise {
+  animation: rise 220ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
 }
 
 body {

@@ -59,27 +59,23 @@ export function MarketStage({
       {audience ? (
         <div className="flex flex-col gap-4">
           <div>
-            <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-ink-soft ring-1 ring-inset ring-line">
-              {STAGE_LABEL[audience.stage] ?? audience.stage}
-            </span>
-            <p className="mt-2 text-base font-medium leading-snug tracking-tight">{audience.positioning}</p>
+            <span className="label">{STAGE_LABEL[audience.stage] ?? audience.stage}</span>
+            <p className="mt-2 text-lg font-medium leading-snug tracking-tight text-ink">{audience.positioning}</p>
           </div>
 
           {/* ---- the number ---- */}
-          <div className="rounded-lg bg-invert p-3 text-invert-fg">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-ink-mute">North star</p>
-            <p className="mt-1 flex flex-wrap items-baseline gap-x-2">
-              <span className="text-sm font-medium">{audience.kpis.northStar.metric}</span>
-              <span className="rounded bg-surface/10 px-1.5 py-0.5 font-mono text-xs">{audience.kpis.northStar.target}</span>
-            </p>
-            <p className="mt-1.5 text-xs text-ink-mute">{audience.kpis.northStar.why}</p>
+          <div className="border-l-2 border-ink pl-3">
+            <p className="label">North star</p>
+            <p className="mt-1 text-base font-medium leading-snug text-ink">{audience.kpis.northStar.metric}</p>
+            <p className="readout mt-1 text-ink">{audience.kpis.northStar.target}</p>
+            <p className="mt-1.5 text-sm text-ink-soft">{audience.kpis.northStar.why}</p>
           </div>
           {audience.kpis.supporting.length ? (
             <ul className="-mt-2 flex flex-col gap-1 text-sm">
               {audience.kpis.supporting.map((k) => (
                 <li key={k.metric} className="flex flex-wrap items-baseline gap-x-2 text-ink-soft">
                   <span>{k.metric}</span>
-                  <span className="rounded bg-sunken px-1.5 py-0.5 font-mono text-xs text-ink">{k.target}</span>
+                  <span className="readout text-ink">{k.target}</span>
                 </li>
               ))}
             </ul>
@@ -88,7 +84,7 @@ export function MarketStage({
           {/* ---- who ---- */}
           <ul className="flex flex-col gap-2">
             {audience.icp.map((p) => (
-              <li key={p.name} className="rounded-lg border border-line p-3">
+              <li key={p.name} className="border-t border-line-soft pt-3">
                 <p className="text-sm font-medium">{p.name}</p>
                 <p className="mt-1 text-sm text-ink-soft">{p.pain}</p>
                 {p.where.length ? (
@@ -111,7 +107,7 @@ export function MarketStage({
 
           {/* ---- the field ---- */}
           <div className="border-t border-line-soft pt-3">
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">Who else sells to them</h3>
+            <h3 className="label mb-2">Who else sells to them</h3>
             {competitorsWorking ? (
               <div className="flex flex-col gap-2">
                 <Working>Searching the web</Working>

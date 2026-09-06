@@ -61,7 +61,7 @@ export function PostStage({
             aria-label="Caption"
           />
           {content.hashtags.length ? (
-            <p className="text-xs text-ink-mute">{content.hashtags.map((h) => `#${h}`).join(" ")}</p>
+            <p className="readout text-ink-mute">{content.hashtags.map((h) => `#${h}`).join(" ")}</p>
           ) : null}
 
           {error ? <p className="text-sm text-danger-fg">{error}</p> : null}

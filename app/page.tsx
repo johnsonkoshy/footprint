@@ -11,22 +11,22 @@ export const metadata = {
 const STEPS = [
   {
     n: "01",
-    title: "Brand",
+    title: "Read",
     body: "We screenshot your homepage and read your colours, type, logo and voice off it. No brand guidelines to upload, no questionnaire.",
   },
   {
     n: "02",
-    title: "Market",
+    title: "Know",
     body: "Who actually buys this, which named communities they already sit in, who else sells to them, and the one number that tells you it is working.",
   },
   {
     n: "03",
-    title: "Plan",
+    title: "Decide",
     body: "Where to post first and how often. You pick the channels and formats; the plan gets rewritten for exactly what you chose.",
   },
   {
     n: "04",
-    title: "Post",
+    title: "Ship",
     body: "Copy in your voice, set in your type, on your colour, rendered ready to publish.",
   },
 ];
@@ -36,10 +36,10 @@ export default function Landing() {
     <main className="mx-auto flex w-full max-w-[1100px] flex-col gap-16 px-6 py-16">
       <section className="flex flex-col gap-7">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm font-medium text-ink-soft">Footprint</p>
+          <p className="label text-ink">Footprint</p>
           <ThemeToggle />
         </div>
-        <h1 className="max-w-3xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">
+        <h1 className="max-w-3xl text-4xl font-semibold leading-[1.05] tracking-[-0.02em] text-ink sm:text-6xl">
           Marketing that already looks like you, from nothing but your URL.
         </h1>
         <p className="max-w-2xl text-lg leading-relaxed text-ink-soft">
@@ -50,8 +50,8 @@ export default function Landing() {
 
         <UrlStart />
 
-        <p className="text-sm text-ink-mute">
-          Takes about two minutes. Nothing is published without you pressing publish.
+        <p className="readout text-ink-mute">
+          ~6s to your screenshot · ~17s to your palette · ~2min to a plan · nothing published until you press publish
         </p>
       </section>
 
@@ -83,14 +83,12 @@ export default function Landing() {
       </section>
 
       <section className="flex flex-col gap-6">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-ink-mute">
-          What happens when you paste
-        </h2>
+        <h2 className="label">What happens when you paste</h2>
         <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s) => (
             <li key={s.n} className="flex flex-col gap-2">
-              <span className="font-mono text-xs text-ink-mute">{s.n}</span>
-              <h3 className="text-base font-medium">{s.title}</h3>
+              <span className="readout text-ink-faint">{s.n}</span>
+              <h3 className="text-base font-medium text-ink">{s.title}</h3>
               <p className="text-sm leading-relaxed text-ink-soft">{s.body}</p>
             </li>
           ))}
@@ -98,9 +96,7 @@ export default function Landing() {
       </section>
 
       <section className="flex flex-col gap-4 border-t border-line pt-8">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-ink-mute">
-          What it will not do
-        </h2>
+        <h2 className="label">What it will not do</h2>
         <p className="max-w-2xl text-sm leading-relaxed text-ink-soft">
           It will not tell you your positioning is great when your homepage says the same thing as
           everyone else&apos;s. It will not invent competitors it could not find, or set you a

@@ -62,7 +62,7 @@ export function KitPanel({
           <label key={key} className="group flex cursor-pointer flex-col gap-1.5">
             <span className="relative block">
               <span
-                className="block h-14 w-full rounded-lg ring-1 ring-inset ring-line/10 transition group-hover:ring-line/30"
+                className="block h-12 w-full rounded ring-1 ring-inset ring-line transition group-hover:ring-ink"
                 style={{ backgroundColor: kit.palette[key] }}
               />
               {onChange ? (
@@ -76,8 +76,8 @@ export function KitPanel({
               ) : null}
             </span>
             <span className="flex flex-col leading-tight">
-              <span className="text-[11px] font-medium text-ink-soft">{label}</span>
-              <span className="font-mono text-[11px] text-ink-mute">{kit.palette[key]}</span>
+              <span className="label">{label}</span>
+              <span className="readout text-ink">{kit.palette[key]}</span>
             </span>
           </label>
         ))}
@@ -86,24 +86,24 @@ export function KitPanel({
       {!compact ? (
         <>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-ink-soft">Display</dt>
+            <dt className="label self-center">Display</dt>
             <dd className="truncate">
               {kit.typography.display}
               {fonts ? <span className="text-ink-mute"> → {fonts.display.google}</span> : null}
             </dd>
-            <dt className="text-ink-soft">Body</dt>
+            <dt className="label self-center">Body</dt>
             <dd className="truncate">
               {kit.typography.body}
               {fonts ? <span className="text-ink-mute"> → {fonts.body.google}</span> : null}
             </dd>
-            <dt className="text-ink-soft">Radius</dt>
+            <dt className="label self-center">Radius</dt>
             <dd>{kit.geometry.radius}px</dd>
-            <dt className="text-ink-soft">Imagery</dt>
+            <dt className="label self-center">Imagery</dt>
             <dd className="text-ink">{kit.imagery.style}</dd>
           </dl>
 
           <div className="rounded-lg bg-raised p-4 text-sm ring-1 ring-inset ring-line/70">
-            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-soft">
+            <div className="label mb-1.5">
               Voice · {kit.voice.tone}
             </div>
             <p className="italic text-ink">&ldquo;{kit.voice.sample}&rdquo;</p>

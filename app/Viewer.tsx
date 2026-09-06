@@ -28,6 +28,7 @@ import { planBodyOf } from "@/lib/strategy/rebuild";
 import { STAGE_CENTS, useBrandCache, type CachedBrand } from "@/lib/cache";
 import { EMPTY_SIGNALS } from "@/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { RunLog, stamp, type LogEntry } from "@/components/RunLog";
 import { BrandStage } from "@/components/stages/BrandStage";
 import { FootprintStage } from "@/components/stages/FootprintStage";
 import { MarketStage } from "@/components/stages/MarketStage";
@@ -46,7 +47,8 @@ import type { StageStatus } from "@/components/stages/Stage";
 type Phase = "idle" | "capturing" | "auditing" | "ready" | "failed";
 const STORE_KEY = "footprint:viewer";
 
-const STEPS = ["Brand", "Market", "Plan", "Post"] as const;
+/** Founder verbs, not tool nouns: what you do at each step, not what we emit. */
+const STEPS = ["Read", "Know", "Decide", "Ship"] as const;
 
 /** One definition of "we advise this", used to seed the picks and to test them. */
 const isRecommended = (c: { move: string }) => c.move === "start-here" || c.move === "next";
@@ -99,6 +101,27 @@ export function Viewer() {
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const lastImg = useRef<string | null>(null);
+
+  /**
+   * The process narrating itself. Every entry is a real event at its real
+   * elapsed time. The run's start lives inside this state, not in a ref: the
+   * elapsed time is computed in the updater, so no function that render can
+   * reach ever reads a ref, and the compiler has nothing to object to.
+   */
+  const [log, setLog] = useState<{ startedAt: number; entries: LogEntry[] }>({ startedAt: 0, entries: [] });
+  const mark = useCallback((text: string, live = false) => {
+    setLog((prev) => ({
+      startedAt: prev.startedAt,
+      entries: [
+        ...prev.entries.map((e) => ({ ...e, live: false })),
+        { t: prev.startedAt ? (Date.now() - prev.startedAt) / 1000 : 0, text, live },
+      ],
+    }));
+  }, []);
+  /** Reset the clock and the log at the start of a run. */
+  const beginRun = useCallback((first: string) => {
+    setLog({ startedAt: Date.now(), entries: [{ t: 0, text: first, live: true }] });
+  }, []);
 
   /** Non-null once this run was served from the cache, for the banner. */
   const [fromCache, setFromCache] = useState<CachedBrand | null>(null);
@@ -221,8 +244,11 @@ export function Viewer() {
       setPlanning(true);
       setPlanElapsed(0);
       setPlanError(null);
+      mark(g.trim() ? `rewriting the plan · "${g.trim().slice(0, 40)}"` : "writing the plan", true);
       try {
         const res = await strategize(k, url.trim(), s, g, a);
+        const first = res.plan.channels.find((c) => c.move === "start-here")?.name.toLowerCase();
+        mark(`plan written · ${res.plan.audit.maturity}${first ? ` · ${first} first` : ""}`);
         setPlan(res.plan);
         setSignals(res.signals);
         setPlanNotes(res.usedFallback ? res.notes : []);
@@ -238,7 +264,7 @@ export function Viewer() {
         setPlanning(false);
       }
     },
-    [url, save],
+    [url, save, mark],
   );
 
   /** Everything a finished run produced, restored without a single API call. */
@@ -258,6 +284,10 @@ export function Viewer() {
     }
     setFromCache(row);
     setPhase("ready");
+    setLog({
+      startedAt: Date.now(),
+      entries: [{ t: 0, text: `restored from cache · ${Math.round(row.cents ?? 17)}¢ and two minutes not spent` }],
+    });
   }, []);
 
   const runFresh = async () => {
@@ -290,18 +320,27 @@ export function Viewer() {
     setImgUrl(null);
     setPublished(null);
     setPinnedStep(null);
+    beginRun(`opening ${target}`);
     try {
       start(target);
       const { kit: k, ...rest } = await extractStream(target, (c) => {
         setCapture(c);
         setSignals(c.signals);
         setPhase("auditing");
+        const surfaces = c.signals.surfaces.filter((f) => f.linked || f.reachable).length;
+        mark(
+          `homepage captured · ${c.signals.socials.length} social · ${surfaces} surfaces · ${
+            c.signals.martech.length ? c.signals.martech.map((m) => m.name.toLowerCase()).join(", ") : "no martech"
+          }`,
+        );
+        mark("auditing the brand", true);
         save({ url: target, stage: "analyzing" });
       });
       setKit(k);
       setMeta(rest);
       setSiteText(rest.text);
       setPhase("ready");
+      mark(`palette read · ${k.palette.primary} · ${k.typography.display.toLowerCase()}${k.logo ? " · logo captured" : ""}`);
       save({
         url: target,
         kit: k,
@@ -315,6 +354,7 @@ export function Viewer() {
       const message = String(err instanceof Error ? err.message : err);
       setError(message);
       setPhase("failed");
+      mark(`could not read the site · ${message.slice(0, 60)}`);
       save({ url: target, status: "failed", error: message.slice(0, 500) });
     }
   };
@@ -333,9 +373,12 @@ export function Viewer() {
       setAudience(null);
       setCompetitors(null);
 
+      mark("reading who this is for", true);
       readAudience(k, s, text)
         .then((res) => {
           setAudience(res.audience);
+          const places = res.audience.icp.reduce((n, p) => n + p.where.length, 0);
+          mark(`buyer named · ${res.audience.icp.length} profiles · ${places} places · ${res.audience.stage}`);
           save({ url: url.trim(), audience: res.audience, addCents: STAGE_CENTS.audience });
           runPlan(k, s, "", res.audience);
         })
@@ -345,6 +388,11 @@ export function Viewer() {
       findCompetitors(k, text)
         .then((res) => {
           setCompetitors(res.data);
+          mark(
+            res.data.competitors.length
+              ? `field researched · ${res.data.competitors.map((c) => c.name.toLowerCase()).join(", ")}`
+              : "field researched · no clear competitor found",
+          );
           save({ url: url.trim(), competitors: res.data, addCents: STAGE_CENTS.competitors });
         })
         .catch((err) =>
@@ -352,7 +400,7 @@ export function Viewer() {
         )
         .finally(() => setCompetitorsWorking(false));
     },
-    [runPlan, save, url],
+    [runPlan, save, url, mark],
   );
 
   /**
@@ -477,9 +525,12 @@ export function Viewer() {
     if (!kit || !t) return;
     setGenerating(true);
     setRenderError(null);
+    const b0 = override?.brief ?? brief;
+    mark(`writing as them${b0?.channel ? ` · for ${b0.channel.toLowerCase()}` : ""}`, true);
     try {
       const made = await generate(kit, t, override?.brief ?? brief);
       setContent(made);
+      mark(`post written · "${made.hook.slice(0, 40)}"`);
       const b = override?.brief ?? brief;
       savePost({ url: url.trim(), topic: t, channel: b?.channel, format: b?.format, content: made, template });
     } catch (err) {
@@ -593,73 +644,67 @@ export function Viewer() {
 
   const goto = (i: number) => setPinnedStep(Math.max(0, Math.min(STEPS.length - 1, i)));
 
-  const primary = (() => {
-    if (step === 2 && plan) {
-      return {
-        label: generating ? "Writing…" : `Write this post for ${effectiveChannel || "them"}`,
-        onClick: writePost,
-        disabled: generating || !topic.trim() || !pickedChannels.length,
-      };
-    }
-    if (step < 3 && ready[step + 1]) {
-      return { label: `Next: ${STEPS[step + 1]}`, onClick: () => goto(step + 1), disabled: false };
-    }
-    if (step === 3 && content) {
-      return { label: "Write another", onClick: () => goto(2), disabled: false };
-    }
-    return null;
-  })();
+  // Plain conditionals rather than an IIFE: a function executed during render
+  // gets its reachable closures analysed as render-time, and one of them
+  // reads a ref.
+  let primary: { label: string; onClick: () => void; disabled: boolean } | null = null;
+  if (step === 2 && plan) {
+    primary = {
+      label: generating ? "Writing" : `Write for ${effectiveChannel || "them"}`,
+      onClick: writePost,
+      disabled: generating || !topic.trim() || !pickedChannels.length,
+    };
+  } else if (step < 3 && ready[step + 1]) {
+    primary = { label: `Next: ${STEPS[step + 1]}`, onClick: () => goto(step + 1), disabled: false };
+  } else if (step === 3 && content) {
+    primary = { label: "Write another", onClick: () => goto(2), disabled: false };
+  }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface">
-      {/* ---------------- header: identity, progress, escape ---------------- */}
+      {/* ---------------- header: the rail ---------------- */}
       <header className="shrink-0 border-b border-line">
-        <div className="mx-auto flex w-full max-w-[1500px] items-center gap-6 px-6 py-3">
-          <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight">
+        <div className="mx-auto flex w-full max-w-[1500px] items-center gap-6 px-6 py-2.5">
+          <Link href="/" className="label shrink-0 text-ink">
             Footprint
           </Link>
 
-          <ol className="flex min-w-0 flex-1 items-center gap-1">
+          <ol className="flex min-w-0 flex-1 items-center gap-5">
             {STEPS.map((label, i) => {
-              const state = ready[i] ? "done" : i === furthest ? "now" : "todo";
-              const reachable = ready[i] || i <= furthest;
+              const done = ready[i];
+              const now = i === furthest && !done;
+              const reachable = done || i <= furthest;
               return (
                 <li key={label} className="flex min-w-0 items-center">
-                  {i > 0 ? <span aria-hidden className="mx-1 h-px w-4 shrink-0 bg-line sm:w-8" /> : null}
                   <button
                     onClick={() => reachable && goto(i)}
                     disabled={!reachable}
                     aria-current={step === i ? "step" : undefined}
-                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm transition ${
+                    className={`label flex items-center gap-2 border-b pb-1 transition ${
                       step === i
-                        ? "bg-invert text-invert-fg"
+                        ? "border-ink text-ink"
                         : reachable
-                          ? "text-ink-soft hover:bg-sunken"
-                          : "text-ink-mute"
+                          ? "border-transparent text-ink-soft hover:text-ink"
+                          : "border-transparent text-ink-faint"
                     }`}
                   >
-                    <span
-                      aria-hidden
-                      className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
-                        state === "done"
-                          ? step === i
-                            ? "bg-surface"
-                            : "bg-invert"
-                          : state === "now"
-                            ? "animate-pulse bg-active"
-                            : "bg-ink-faint"
-                      }`}
-                    />
+                    <span className="readout text-[10px] text-ink-mute">0{i + 1}</span>
                     {label}
+                    {now ? (
+                      <span aria-hidden className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-active" />
+                    ) : null}
                   </button>
                 </li>
               );
             })}
           </ol>
 
-          <span className="hidden min-w-0 shrink truncate text-sm text-ink-mute sm:block">{url}</span>
+          <span className="readout hidden min-w-0 shrink truncate text-ink-mute sm:block">
+            {url}
+            {log.entries.length ? ` · ${stamp(log.entries[log.entries.length - 1].t)}` : ""}
+          </span>
           <ThemeToggle />
-          <Link href="/" className="shrink-0 text-sm text-ink-soft hover:text-ink">
+          <Link href="/" className="label shrink-0 text-ink-soft hover:text-ink">
             Start over
           </Link>
         </div>
@@ -670,12 +715,9 @@ export function Viewer() {
         {/* min-h-0 is what lets this column scroll instead of stretching the page. */}
         <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
           {fromCache ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ok px-3 py-2 text-sm text-ok-fg ring-1 ring-inset ring-ok-line">
-              <span>
-                Loaded from cache — no API calls, saved about{" "}
-                {Math.round(fromCache.cents ?? 17)}¢ and two minutes.
-              </span>
-              <button onClick={runFresh} className="font-medium underline underline-offset-2">
+            <div className="readout flex flex-wrap items-center justify-between gap-2 border-l-2 border-ok-fg pl-3 text-ok-fg">
+              <span>from cache · no api calls · {Math.round(fromCache.cents ?? 17)}¢ and two minutes not spent</span>
+              <button onClick={runFresh} className="label text-ok-fg underline underline-offset-2">
                 Run it fresh
               </button>
             </div>
@@ -768,6 +810,10 @@ export function Viewer() {
               error={renderError}
             />
           ) : null}
+
+          <div className="mt-auto border-t border-line pt-4">
+            <RunLog entries={log.entries} />
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-col">
@@ -785,34 +831,36 @@ export function Viewer() {
         </div>
       </main>
 
-      {/* ---------------- footer: back, where you are, forward ---------------- */}
-      <footer className="shrink-0 border-t border-line bg-surface">
-        <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-4 px-6 py-3">
+      {/* ---------------- footer: back, state, the one action ---------------- */}
+      <footer className="shrink-0 border-t border-line bg-page">
+        <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-4 px-6 py-2.5">
           <button
             onClick={() => goto(step - 1)}
             disabled={step === 0}
-            className="rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium disabled:opacity-30"
+            className="label text-ink-soft hover:text-ink disabled:opacity-30"
           >
-            Back
+            ‹ Back
           </button>
 
-          <p className="min-w-0 truncate text-sm text-ink-soft">
+          <p className="readout min-w-0 truncate text-ink-mute">
             {phase === "failed"
-              ? "Couldn't read that site."
+              ? "couldn't read that site"
               : !ready[step] && step === furthest
-                ? `Working on ${STEPS[step].toLowerCase()}…`
+                ? `working on ${STEPS[step].toLowerCase()}`
                 : step < 3 && !ready[step + 1]
-                  ? `${STEPS[step + 1]} is still being written`
-                  : ""}
+                  ? `${STEPS[step + 1].toLowerCase()} is still being written`
+                  : step === 2 && plan
+                    ? `${pickedChannels.length} channel${pickedChannels.length === 1 ? "" : "s"} · ${pickedFormats.length} format${pickedFormats.length === 1 ? "" : "s"} · ${selectionDirty ? "plan needs a rebuild" : "plan is current"}`
+                    : ""}
           </p>
 
           {primary ? (
             <button
               onClick={primary.onClick}
               disabled={primary.disabled}
-              className="rounded-lg bg-invert px-4 py-1.5 text-sm font-medium text-invert-fg disabled:opacity-40"
+              className="label rounded bg-invert px-4 py-2 text-invert-fg disabled:opacity-40"
             >
-              {primary.label}
+              {primary.label} →
             </button>
           ) : (
             <span className="w-16" />

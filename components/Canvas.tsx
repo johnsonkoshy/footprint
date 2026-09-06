@@ -17,6 +17,7 @@ export function Canvas({
   renderError,
   template,
   onTemplate,
+  controlShown = false,
 }: {
   mode: "empty" | "brand" | "screenshot" | "post";
   kit: BrandKit | null;
@@ -27,6 +28,8 @@ export function Canvas({
   renderError: string | null;
   template: TemplateId;
   onTemplate: (t: TemplateId) => void;
+  /** The generic control is on the stage, not the on-brand post. */
+  controlShown?: boolean;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -113,6 +116,11 @@ export function Canvas({
           </figure>
         ) : null}
 
+        {mode === "post" && controlShown ? (
+          <span className="label absolute left-4 top-4 rounded bg-page/80 px-2 py-1 text-warn-fg ring-1 ring-inset ring-warn-line">
+            Generic · no voice guide
+          </span>
+        ) : null}
         {mode === "post" ? (
           renderError ? (
             <p className="max-w-md text-center text-sm text-danger-fg">{renderError}</p>

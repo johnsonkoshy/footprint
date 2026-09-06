@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  let body: { kit?: unknown; topic?: unknown; brief?: unknown };
+  let body: { kit?: unknown; topic?: unknown; brief?: unknown; control?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -38,6 +38,9 @@ export async function POST(req: Request) {
     kit.data,
     body.topic.trim(),
     brief.success ? brief.data : undefined,
+    // The control is written blind, without the voice guide, so a founder can
+    // see the difference between "a post about us" and "a post by us".
+    { control: body.control === true },
   );
   return NextResponse.json({ ...result, ms: Date.now() - startedAt });
 }

@@ -15,12 +15,13 @@ import type {
 import {
   extractStream,
   findCompetitors,
-  generate,
   readAudience,
   rebuildPlan,
   renderPng,
   strategize,
+  writeCopy,
   type Brief,
+  type WeekPost,
   type CaptureEvent,
   type ExtractResponse,
 } from "@/lib/client";
@@ -94,6 +95,17 @@ export function Viewer() {
   const [rebuilding, setRebuilding] = useState(false);
 
   const [content, setContent] = useState<ContentSet | null>(null);
+  /**
+   * Week one. One post per format the founder ticked, written in parallel,
+   * each with a generic control beside it. `content` and `imgUrl` remain "the
+   * selected post" so the stage, the editor and publishing keep working as
+   * they did for a single post.
+   */
+  const [week, setWeek] = useState<WeekPost[]>([]);
+  const [selected, setSelected] = useState(0);
+  /** Put the control on the stage instead: the swap-the-logo test, visible. */
+  const [showControl, setShowControl] = useState(false);
+  const inFlightRenders = useRef<Set<string>>(new Set());
   const [generating, setGenerating] = useState(false);
   const [template, setTemplate] = useState<TemplateId>("statement");
 
@@ -165,6 +177,10 @@ export function Viewer() {
       setTopic(s.topic ?? "");
       setContent(s.content ?? null);
       setTemplate(s.template ?? "statement");
+      if (Array.isArray(s.week)) {
+        setWeek(s.week.map((w: WeekPost) => ({ ...w, imgUrl: null })));
+        setSelected(typeof s.selected === "number" ? s.selected : 0);
+      }
       // Without these the restored plan renders with nothing ticked, which
       // reads as "pick at least one channel" on a plan that already has some -
       // and the save effect then writes the empty picks back over the good ones.
@@ -201,12 +217,15 @@ export function Viewer() {
           url, kit, meta, capture, signals, siteText, audience, competitors,
           plan, channel, goal, brief, topicIndex, topic, content, template,
           pickedChannels, pickedFormats,
+          // Object URLs die with the page; the render effect makes new ones.
+          week: week.map((w) => ({ ...w, imgUrl: null })),
+          selected,
         }),
       );
     } catch {
       /* quota or private mode - state just won't survive a refresh */
     }
-  }, [url, kit, meta, capture, signals, siteText, audience, competitors, plan, channel, goal, brief, topicIndex, topic, content, template, pickedChannels, pickedFormats]);
+  }, [url, kit, meta, capture, signals, siteText, audience, competitors, plan, channel, goal, brief, topicIndex, topic, content, template, pickedChannels, pickedFormats, week, selected]);
 
   useEffect(() => {
     fetch("/api/publish")
@@ -318,6 +337,9 @@ export function Viewer() {
     setBrief(undefined);
     setContent(null);
     setImgUrl(null);
+    setWeek([]);
+    setSelected(0);
+    setShowControl(false);
     setPublished(null);
     setPinnedStep(null);
     beginRun(`opening ${target}`);
@@ -520,51 +542,142 @@ export function Viewer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, cacheLoading, cached, hydrateFrom, fillGaps]);
 
-  const runGenerate = async (override?: { brief?: Brief }) => {
-    const t = topic.trim();
-    if (!kit || !t) return;
-    setGenerating(true);
+  const patchWeek = (id: string, patch: Partial<WeekPost>) =>
+    setWeek((prev) => prev.map((w) => (w.id === id ? { ...w, ...patch } : w)));
+
+  /**
+   * Choosing the formats and pressing the button is the approval. Nothing is
+   * written before this. Every ticked format becomes one post, all written in
+   * parallel; each post's control is requested alongside it so the comparison
+   * is ready by the time the founder looks.
+   */
+  const writeWeek = () => {
+    if (!kit || !plan) return;
+    const picked = plan.channels.find((c) => c.name === effectiveChannel);
+    const formats = plan.contentTypes.filter((c) => pickedFormats.includes(c.name));
+    if (!formats.length) return;
+
+    const entries: WeekPost[] = formats.map((f, i) => {
+      const idx = plan.contentTypes.findIndex((c) => c.name === f.name);
+      return {
+        id: `${Date.now()}-${i}`,
+        format: f.name,
+        // The founder may have edited the selected brief; the others are as proposed.
+        topic: idx === topicIndex && topic.trim() ? topic.trim() : f.topic,
+        brief: { channel: picked?.name, format: f.name, cadence: picked?.cadence },
+        content: null,
+        fidelity: null,
+        control: null,
+        controlFidelity: null,
+        imgUrl: null,
+        error: null,
+      };
+    });
+
+    const first = entries[0].brief;
+    setBrief(first);
+    setWeek(entries);
+    setSelected(0);
+    setShowControl(false);
+    setContent(null);
+    setImgUrl(null);
     setRenderError(null);
-    const b0 = override?.brief ?? brief;
-    mark(`writing as them${b0?.channel ? ` · for ${b0.channel.toLowerCase()}` : ""}`, true);
-    try {
-      const made = await generate(kit, t, override?.brief ?? brief);
-      setContent(made);
-      mark(`post written · "${made.hook.slice(0, 40)}"`);
-      const b = override?.brief ?? brief;
-      savePost({ url: url.trim(), topic: t, channel: b?.channel, format: b?.format, content: made, template });
-    } catch (err) {
-      setRenderError(String(err instanceof Error ? err.message : err));
-    } finally {
+    setGenerating(true);
+    setPinnedStep(3);
+    mark(`writing week one · ${entries.length} post${entries.length === 1 ? "" : "s"}${picked ? ` · for ${picked.name.toLowerCase()}` : ""}`, true);
+
+    let landed = 0;
+    let firstShown = false;
+    const jobs = entries.map(async (e, i) => {
+      try {
+        const made = await writeCopy(kit, e.topic, e.brief);
+        patchWeek(e.id, { content: made.content, fidelity: made.fidelity });
+        landed += 1;
+        mark(`post ${i + 1} written · "${made.content.hook.slice(0, 36)}" · ${made.fidelity.held}/${made.fidelity.checked} voice rules held`);
+        savePost({ url: url.trim(), topic: e.topic, channel: e.brief.channel, format: e.format, content: made.content, template });
+        if (!firstShown) {
+          firstShown = true;
+          setSelected(i);
+          setContent(made.content);
+        }
+      } catch (err) {
+        patchWeek(e.id, { error: String(err instanceof Error ? err.message : err) });
+      }
+      // The control is cheaper and never blocks the on-brand post.
+      try {
+        const generic = await writeCopy(kit, e.topic, e.brief, true);
+        patchWeek(e.id, { control: generic.content, controlFidelity: generic.fidelity });
+      } catch {
+        /* a missing control just means no comparison for this one */
+      }
+    });
+
+    void Promise.allSettled(jobs).then(() => {
       setGenerating(false);
-    }
+      mark(landed ? `week one ready · ${landed} of ${entries.length} posts` : "week one failed · nothing was written");
+    });
   };
 
-  /** Choosing a brief and pressing the button is the approval. Nothing is written before this. */
-  const writePost = () => {
-    if (!plan) return;
-    const picked = plan.channels.find((c) => c.name === effectiveChannel);
-    const next: Brief = { channel: picked?.name, format: plan.contentTypes[topicIndex]?.name, cadence: picked?.cadence };
-    setBrief(next);
-    runGenerate({ brief: next });
-    setPinnedStep(3);
+  /** Editing the selected post edits the week entry it came from. */
+  const editSelected = (c: ContentSet) => {
+    setContent(c);
+    const cur = week[selected];
+    if (cur) patchWeek(cur.id, { content: c });
   };
+
+  const selectedEntry = week[selected] ?? null;
+  const staged = showControl && selectedEntry?.control ? selectedEntry.control : content;
 
   const draw = useCallback(async () => {
-    if (!kit || !content) return;
+    if (!kit || !staged) return;
     setRendering(true);
     setRenderError(null);
     try {
-      const next = await renderPng(kit, content, template);
+      const next = await renderPng(kit, staged, template);
       if (lastImg.current) URL.revokeObjectURL(lastImg.current);
       lastImg.current = next;
       setImgUrl(next);
+      // The strip's thumbnail should be the on-brand post, not the control.
+      if (!showControl && selectedEntry) {
+        setWeek((prev) => prev.map((w) => (w.id === selectedEntry.id ? { ...w, imgUrl: next } : w)));
+      }
     } catch (err) {
       setRenderError(String(err instanceof Error ? err.message : err));
     } finally {
       setRendering(false);
     }
-  }, [kit, content, template]);
+    // selectedEntry is derived from week+selected; listing it would re-run on
+    // every thumbnail write and loop. staged already covers the content change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kit, staged, template, showControl]);
+
+  /**
+   * Any week entry that has copy but no picture gets one. This covers the
+   * posts that landed while another was selected, and a restored session,
+   * where object URLs did not survive. The in-flight set stops a re-render
+   * from requesting the same picture twice.
+   */
+  useEffect(() => {
+    if (!kit) return;
+    for (const w of week) {
+      if (!w.content || w.imgUrl || inFlightRenders.current.has(w.id)) continue;
+      inFlightRenders.current.add(w.id);
+      renderPng(kit, w.content, template)
+        .then((u) => patchWeek(w.id, { imgUrl: u }))
+        .catch(() => {})
+        .finally(() => inFlightRenders.current.delete(w.id));
+    }
+  }, [week, kit, template]);
+
+  /**
+   * A template change makes every thumbnail stale. Done in the handler, not an
+   * effect: the stale pictures are a consequence of the click, so the click
+   * clears them, and the render effect above makes new ones.
+   */
+  const changeTemplate = (t: TemplateId) => {
+    setTemplate(t);
+    setWeek((prev) => prev.map((w) => (w.imgUrl ? { ...w, imgUrl: null } : w)));
+  };
 
   useEffect(() => {
     const id = setTimeout(draw, 220);
@@ -572,6 +685,14 @@ export function Viewer() {
   }, [draw]);
 
 
+
+  const selectPost = (i: number) => {
+    const w = week[i];
+    if (!w?.content) return;
+    setSelected(i);
+    setContent(w.content);
+    setBrief(w.brief);
+  };
 
   const sendPost = async () => {
     if (!imgUrl || !content) return;
@@ -602,7 +723,7 @@ export function Viewer() {
     audience ? "done" : audienceWorking ? "working" : "pending";
   const planStatus: StageStatus =
     planError ? "error" : plan ? "done" : planning ? "working" : "pending";
-  const postStatus: StageStatus = content ? "done" : generating ? "working" : "pending";
+  const postStatus: StageStatus = week.length ? "done" : generating ? "working" : "pending";
 
   /**
    * The plan on screen was written for a different selection than the one
@@ -650,14 +771,16 @@ export function Viewer() {
   let primary: { label: string; onClick: () => void; disabled: boolean } | null = null;
   if (step === 2 && plan) {
     primary = {
-      label: generating ? "Writing" : `Write for ${effectiveChannel || "them"}`,
-      onClick: writePost,
-      disabled: generating || !topic.trim() || !pickedChannels.length,
+      label: generating
+        ? "Writing"
+        : `Write week one for ${effectiveChannel || "them"} · ${pickedFormats.length} post${pickedFormats.length === 1 ? "" : "s"}`,
+      onClick: writeWeek,
+      disabled: generating || !pickedFormats.length || !pickedChannels.length,
     };
   } else if (step < 3 && ready[step + 1]) {
     primary = { label: `Next: ${STEPS[step + 1]}`, onClick: () => goto(step + 1), disabled: false };
   } else if (step === 3 && content) {
-    primary = { label: "Write another", onClick: () => goto(2), disabled: false };
+    primary = { label: "Write another week", onClick: () => goto(2), disabled: false };
   }
 
   return (
@@ -775,7 +898,7 @@ export function Viewer() {
               goal={goal}
               onGoalChange={setGoal}
               onReplan={() => kit && runPlan(kit, signals, goal, audience)}
-              onWrite={writePost}
+              onWrite={writeWeek}
               writing={generating}
               onRetry={() => kit && runPlan(kit, signals, goal, audience)}
               pickedChannels={pickedChannels}
@@ -800,9 +923,16 @@ export function Viewer() {
           {step === 3 ? (
             <PostStage
               status={postStatus}
-              brief={brief}
+              week={week}
+              selected={selected}
+              onSelect={selectPost}
               content={content}
-              onContentChange={setContent}
+              onContentChange={editSelected}
+              showControl={showControl}
+              onToggleControl={() => setShowControl((v) => !v)}
+              channel={effectiveChannel}
+              cadence={plan?.channels.find((c) => c.name === effectiveChannel)?.cadence ?? ""}
+              brandName={kit?.name ?? ""}
               publish={publish}
               onPublish={sendPost}
               publishing={publishing}
@@ -823,10 +953,11 @@ export function Viewer() {
             url={capture?.url ?? url}
             screenshot={capture?.screenshot ?? null}
             imgUrl={imgUrl}
+            controlShown={showControl && Boolean(selectedEntry?.control)}
             rendering={rendering}
             renderError={renderError}
             template={template}
-            onTemplate={setTemplate}
+            onTemplate={changeTemplate}
           />
         </div>
       </main>

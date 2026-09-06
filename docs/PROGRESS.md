@@ -180,6 +180,65 @@ Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
 
 ---
 
+## Week one, and the generic control
+
+Asked to look at the market and build something better. The survey, with
+sources in the commit that added this section:
+
+| Who | What they do | What reviewers say |
+|---|---|---|
+| SocialPost.ai, Apaya, Semrush Social AI | URL -> on-brand posts, visuals, "100+ ideas a day" | Volume; brand read is a scrape, not an audit |
+| AdCreative.ai | URL -> ad creatives | Billing dark patterns dominate reviews; output "generic, repetitive"; limited customisation |
+| Predis.ai | prompts/product links -> posts and video | Cluttered UI, credit burn, "stock-heavy" templates, slow support |
+| Canva Brand Kit from URL | colours/fonts/logos off a site | Canva's own docs: custom fonts unavailable, anti-scraping breaks it, "always review" |
+| Brandfetch, brand.dev, logo.dev | brand data APIs | A database or a shallow scrape; no voice, no judgement |
+| Jasper, Copy.ai, Typeface | brand-voice copy | Voice drifts back to generic; heavy setup; "outputs from different tools are eerily similar" |
+| Piktochart, Venngage, m1-project, founderpal | plan / ICP generators | Forms you fill in; disconnected from brand and from output |
+
+Four failures recur across the whole field, in reviewers' words: **generic
+output** ("you could put any logo on it"), **shallow extraction**, **volume
+over judgement**, and **no provenance** - nobody shows why. Footprint already
+answers three of those by construction: evidence is measured and shown, the
+pipeline is chained URL -> brand -> buyer -> plan -> post, and the voice guide
+is enforced with an explicit avoid list. Where it fell short of the market: it
+wrote **one post**, when every competitor writes sets; and it **claimed** to be
+on-brand without ever proving it.
+
+### Week one
+
+From the approved plan, one post per format the founder ticked, all written in
+parallel, all rendered, presented as a strip in the Ship step. Selecting one
+puts it on the stage; editing it edits that entry; the whole week exports as
+markdown for a scheduler or a notes app. Cadence is not parsed from the plan's
+prose - a post per chosen format is the honest unit, and the cadence line sits
+above the strip for the founder to apply.
+
+Pictures are effect-driven: any entry with copy and no image gets one, which
+covers posts that landed while another was selected and a restored session,
+where object URLs did not survive. A template change clears every thumbnail.
+
+### The generic control
+
+Beside each post: the same topic written by a capable copywriter with exactly
+what a URL-level tool has - name, tagline, topic, platform - and none of the
+voice guide. Not a strawman; this is the market's actual setup. A toggle puts
+the generic draft on the stage in the same template, which is the
+swap-the-logo test made visible. Each post carries a fidelity readout - how
+many of the mechanically testable voice rules it held - and the control
+carries its own, so "4/4 held" sits beside "generic draft holds 2/4".
+
+Only rules `breaks()` can evaluate count: exclamation marks and quoted
+forbidden words. The readout says how many were checkable rather than implying
+every rule was verified.
+
+Deferred: per-platform aspect ratios. They would be the same two templates at
+different sizes, but that brushes hard rule 5 closely enough to ask first.
+
+Cost per week of three posts: about 5 cents - three on-brand writes, three
+controls, six renders.
+
+---
+
 ## The instrument
 
 Asked for "futuristic, from a founder's perspective". The trap in that brief:

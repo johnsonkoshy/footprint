@@ -51,6 +51,47 @@ notice, you have failed. Write something only this brand could have written.`;
  * "a post" to "this format, for this channel" - a LinkedIn customer story and
  * an X changelog note are not the same piece of writing.
  */
+/**
+ * The control. A competent generalist with exactly what a URL-level tool has -
+ * the company's name, tagline and the topic - and none of what makes this
+ * product different: no tone, no sample sentence, no list of moves the brand
+ * never makes. Not a strawman: this is the market's actual setup, and the
+ * point is to let a founder see the difference rather than take our word.
+ */
+const GENERIC_SYSTEM = `You are a capable social media copywriter. You have the company's
+name, their one-line tagline, and a topic. Write an engaging post set that would perform
+well on social media.
+
+hook - one punchy line that grabs attention, under about 60 characters.
+caption - two or three sentences with a clear call to action.
+slides - exactly 4 short lines for a carousel.
+hashtags - 3 to 5, lowercase, no # prefix.
+
+Be energetic and clear. Use the conventions that work on the platform.`;
+
+/** What a voice-fidelity readout needs: which rules we could check, and how they fared. */
+export type Fidelity = {
+  /** voice.avoid rules we can test mechanically */
+  checked: number;
+  held: number;
+  violations: string[];
+  hookChars: number;
+  /** under the display-size budget the templates are built for */
+  hookFits: boolean;
+};
+
+export function measureFidelity(kit: BrandKit, content: ContentSet): Fidelity {
+  const testable = kit.voice.avoid.filter((rule) => isTestable(rule));
+  const violations = testable.filter((rule) => breaks(rule, content));
+  return {
+    checked: testable.length,
+    held: testable.length - violations.length,
+    violations,
+    hookChars: content.hook.length,
+    hookFits: content.hook.length <= 60,
+  };
+}
+
 export type Brief = {
   channel?: string;
   format?: string;
@@ -86,6 +127,7 @@ Write the post set as ${kit.name} would.`;
 
 export type GenerationResult = {
   content: ContentSet;
+  fidelity: Fidelity;
   usedFallback: boolean;
   model: string;
   notes: string[];
@@ -96,12 +138,15 @@ export async function generateContent(
   kit: BrandKit,
   topic: string,
   brief?: Brief,
+  opts: { control?: boolean } = {},
 ): Promise<GenerationResult> {
   const notes: string[] = [];
+  const fallback = { ...DEFAULT_CONTENT_SET, hook: kit.tagline, caption: kit.tagline };
 
   if (!hasApiKey()) {
     return {
-      content: { ...DEFAULT_CONTENT_SET, hook: kit.tagline, caption: kit.tagline },
+      content: fallback,
+      fidelity: measureFidelity(kit, fallback),
       usedFallback: true,
       model: GENERATE_MODEL,
       notes: [MISSING_KEY_MESSAGE],
@@ -110,7 +155,10 @@ export async function generateContent(
 
   const client = getClient();
   const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: buildPrompt(kit, topic, brief) },
+    {
+      role: "user",
+      content: opts.control ? buildGenericPrompt(kit, topic, brief) : buildPrompt(kit, topic, brief),
+    },
   ];
   let usage: GenerationResult["usage"];
 
@@ -119,7 +167,7 @@ export async function generateContent(
       const response = await client.messages.parse({
         model: GENERATE_MODEL,
         max_tokens: 16000,
-        system: SYSTEM,
+        system: opts.control ? GENERIC_SYSTEM : SYSTEM,
         messages,
         output_config: { format: zodOutputFormat(ContentDraftSchema) },
       });
@@ -144,9 +192,11 @@ export async function generateContent(
         });
 
         if (validated.success) {
-          const violations = kit.voice.avoid.filter((rule) => breaks(rule, validated.data));
-          if (violations.length) notes.push(`possible voice violations: ${violations.join("; ")}`);
-          return { content: validated.data, usedFallback: false, model: GENERATE_MODEL, notes, usage };
+          const fidelity = measureFidelity(kit, validated.data);
+          if (fidelity.violations.length && !opts.control) {
+            notes.push(`possible voice violations: ${fidelity.violations.join("; ")}`);
+          }
+          return { content: validated.data, fidelity, usedFallback: false, model: GENERATE_MODEL, notes, usage };
         }
 
         const issues = validated.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
@@ -164,12 +214,30 @@ export async function generateContent(
   }
 
   return {
-    content: { ...DEFAULT_CONTENT_SET, hook: kit.tagline, caption: kit.tagline },
+    content: fallback,
+    fidelity: measureFidelity(kit, fallback),
     usedFallback: true,
     model: GENERATE_MODEL,
     notes,
     usage,
   };
+}
+
+function buildGenericPrompt(kit: BrandKit, topic: string, brief?: Brief): string {
+  return `COMPANY: ${kit.name}
+Tagline: ${kit.tagline}
+${brief?.channel ? `Platform: ${brief.channel}` : ""}
+
+TOPIC
+${topic}
+
+Write the post set.`;
+}
+
+/** Only rules `breaks()` can actually evaluate count toward the score. */
+function isTestable(rule: string): boolean {
+  const r = rule.toLowerCase();
+  return r.includes("exclamation") || /["'“](.+?)["'”]/.test(rule);
 }
 
 /**

@@ -93,6 +93,52 @@ export async function extractStream(
 
 export type Brief = { channel?: string; format?: string; cadence?: string };
 
+export type Fidelity = {
+  checked: number;
+  held: number;
+  violations: string[];
+  hookChars: number;
+  hookFits: boolean;
+};
+
+export type WrittenPost = { content: ContentSet; fidelity: Fidelity };
+
+/**
+ * One post, with its voice-fidelity readout. `control` asks for the generic
+ * version instead - the same topic written by a copywriter with no voice guide
+ * - so the on-brand post has something honest to be compared against.
+ */
+export async function writeCopy(
+  kit: BrandKit,
+  topic: string,
+  brief?: Brief,
+  control = false,
+): Promise<WrittenPost> {
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kit, topic, brief, control }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? `Generation failed (${res.status})`);
+  return { content: json.content, fidelity: json.fidelity };
+}
+
+/** One entry in week one: a brief, the post written for it, and its control. */
+export type WeekPost = {
+  id: string;
+  format: string;
+  topic: string;
+  brief: Brief;
+  content: ContentSet | null;
+  fidelity: Fidelity | null;
+  control: ContentSet | null;
+  controlFidelity: Fidelity | null;
+  /** object URL of the rendered on-brand post; never persisted */
+  imgUrl: string | null;
+  error: string | null;
+};
+
 export async function generate(
   kit: BrandKit,
   topic: string,

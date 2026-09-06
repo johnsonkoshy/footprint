@@ -226,18 +226,28 @@ ref-reaching handler into JSX. The real fix removed the ref: the run's start
 time lives inside the log state and elapsed is computed in the updater.
 Nothing render can reach touches a ref.
 
-### The theme script had to go
+### The theme script went, and the warning turned out not to be ours
 
-The inline theme `<script>` produced a React error on every client-side
-navigation - React re-renders it and warns it will never execute - and moving
-it to `next/script` did not change that, since React still renders the
-element. The fix removes the script entirely. An explicit choice is a cookie;
-the root layout reads it on the server and renders the class straight onto
-`<html>`, so there is no flash and nothing to run before paint. "Auto" is pure
-CSS via `prefers-color-scheme`. With no script mutating `<html>`,
+A React error - "encountered a script tag while rendering" - appeared on every
+client-side navigation, and it first showed up during the dark-mode work, so I
+blamed the inline theme script. Moving that to `next/script` did not help.
+Removing the script entirely did not help either: with zero scripts of ours in
+the source or in the RSC payload, the same error fires twice navigating to
+`/compare`, a page nothing that day had touched. The only scripts in the body
+are Next's own `__next_f` flight chunks and the Turbopack HMR client. It is
+Next 16.3.4 dev-mode noise under React 19.2.8, not something in this app.
+
+The theme change stands on its own merits regardless. An explicit choice is a
+cookie; the root layout reads it on the server and renders the class straight
+onto `<html>`, so there is no flash and nothing to run before paint. "Auto" is
+pure CSS via `prefers-color-scheme`. With nothing of ours mutating `<html>`,
 `suppressHydrationWarning` lost its justification and is gone again; the
 extension-attribute mismatch it would also have hidden remains the browser
-extension's doing, not ours.
+extension's doing.
+
+Lesson recorded for the third time this session: a symptom that appears
+alongside a change is not evidence the change caused it. Remove the suspect
+and re-measure before believing the story.
 
 Contrast was re-measured in both modes after the restyle. The step numerals
 and the log timestamps had drifted to `ink-faint`, a line colour, and measured

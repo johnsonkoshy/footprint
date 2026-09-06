@@ -27,20 +27,20 @@ export function Stage({
 }) {
   const shell =
     status === "pending"
-      ? "border-dashed border-zinc-200 text-zinc-400"
+      ? "border-dashed border-line text-ink-mute"
       : status === "error"
-        ? "border-red-200 bg-red-50/40"
+        ? "border-danger-line bg-danger/40"
         : emphasis
-          ? "border-zinc-400"
-          : "border-zinc-200";
+          ? "border-line-strong"
+          : "border-line";
 
   return (
-    <section className={`rounded-xl border bg-white p-4 transition-colors ${shell}`}>
+    <section className={`rounded-xl border bg-surface p-4 transition-colors ${shell}`}>
       <header className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className={`text-sm font-medium ${status === "pending" ? "text-zinc-400" : "text-zinc-900"}`}>
+        <h2 className={`text-sm font-medium ${status === "pending" ? "text-ink-mute" : "text-ink"}`}>
           {title}
         </h2>
-        {meta ? <span className="shrink-0 text-xs text-zinc-400">{meta}</span> : null}
+        {meta ? <span className="shrink-0 text-xs text-ink-mute">{meta}</span> : null}
       </header>
       {children}
     </section>
@@ -49,14 +49,14 @@ export function Stage({
 
 /** A grey bar standing in for text that is on its way. */
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <span className={`block animate-pulse rounded bg-zinc-100 ${className}`} aria-hidden />;
+  return <span className={`block animate-pulse rounded bg-sunken ${className}`} aria-hidden />;
 }
 
 /** Working-state copy: an ellipsis means "in progress", nothing else. */
 export function Working({ children }: { children: ReactNode }) {
   return (
-    <p className="text-sm text-zinc-500">
-      <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 align-middle" aria-hidden />
+    <p className="text-sm text-ink-soft">
+      <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ink-mute align-middle" aria-hidden />
       {children}…
     </p>
   );
@@ -66,7 +66,7 @@ export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone
   return (
     <span
       className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs ${
-        tone === "quiet" ? "border-zinc-100 text-zinc-400" : "border-zinc-200 text-zinc-600"
+        tone === "quiet" ? "border-line-soft text-ink-mute" : "border-line text-ink-soft"
       }`}
     >
       {children}

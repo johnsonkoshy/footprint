@@ -27,6 +27,7 @@ import {
 import { planBodyOf } from "@/lib/strategy/rebuild";
 import { STAGE_CENTS, useBrandCache, type CachedBrand } from "@/lib/cache";
 import { EMPTY_SIGNALS } from "@/types";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { BrandStage } from "@/components/stages/BrandStage";
 import { FootprintStage } from "@/components/stages/FootprintStage";
 import { MarketStage } from "@/components/stages/MarketStage";
@@ -56,6 +57,8 @@ export function Viewer() {
   /** null means "follow the work"; a number means the user chose this step. */
   const [pinnedStep, setPinnedStep] = useState<number | null>(null);
   const started = useRef(false);
+  /** A sessionStorage restore happened; enough to skip paying for extraction. */
+  const restored = useRef(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +127,13 @@ export function Viewer() {
       setUrl(s.url ?? "");
       setCapture(s.capture ?? null);
       setSignals(s.signals ?? null);
+      // These three were missing, so a refresh restored the kit and the plan
+      // but silently dropped the whole Market stage - and because the restore
+      // claims the run below, the Convex hydration that would have supplied
+      // them never got a chance either.
+      setSiteText(s.siteText ?? "");
+      setAudience(s.audience ?? null);
+      setCompetitors(s.competitors ?? null);
       setPlan(s.plan ?? null);
       setChannel(s.channel ?? "");
       setGoal(s.goal ?? "");
@@ -144,8 +154,12 @@ export function Viewer() {
         );
       }
       setPhase("ready");
-      // Claim the run so the Convex effect below does not also act on it.
-      started.current = true;
+      // Deliberately NOT claiming the run here. A session written by an older
+      // build can be missing whole stages, and claiming it would lock in that
+      // hole - Convex has the data but would never get asked. The effect below
+      // prefers the cache and only skips extraction, which is the expensive
+      // part, when a session already gave us a kit.
+      restored.current = true;
     } catch {
       /* a corrupt cache is not worth a crash */
     }
@@ -432,28 +446,24 @@ export function Viewer() {
 
     started.current = true;
 
-    // `kit` is still null in this closure even when the restore effect above
-    // just set it - both effects run in the same commit. Ask storage instead,
-    // or a refresh silently pays for the whole extraction again.
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(STORE_KEY) ?? "{}");
-      if (saved.kit && saved.url?.trim() === incoming.trim()) return;
-    } catch {
-      /* unreadable cache just means we extract, which is the safe direction */
-    }
 
     // Starting the run - from cache or from scratch - is the whole job of this
     // effect, and both paths set state synchronously so the first frame paints
     // the right thing. The cascade the rule guards against is the point here.
     /* eslint-disable react-hooks/set-state-in-effect */
 
-    // A finished run for this URL: hand it back instead of buying it again.
+    // The cache wins over a restored session: it is at least as complete, and
+    // fillGaps tops up anything it is missing.
     if (cached?.status === "ready" && cached.kit) {
       setUrl(incoming);
       hydrateFrom(cached);
       fillGaps(cached);
       return;
     }
+
+    // No usable cache, but a session gave us a kit. Extraction is the expensive
+    // step, so keep what we have rather than paying for it twice.
+    if (restored.current) return;
 
     runExtract(incoming);
     /* eslint-enable react-hooks/set-state-in-effect */
@@ -601,9 +611,9 @@ export function Viewer() {
   })();
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white">
+    <div className="flex h-screen flex-col overflow-hidden bg-surface">
       {/* ---------------- header: identity, progress, escape ---------------- */}
-      <header className="shrink-0 border-b border-zinc-200">
+      <header className="shrink-0 border-b border-line">
         <div className="mx-auto flex w-full max-w-[1500px] items-center gap-6 px-6 py-3">
           <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight">
             Footprint
@@ -615,17 +625,17 @@ export function Viewer() {
               const reachable = ready[i] || i <= furthest;
               return (
                 <li key={label} className="flex min-w-0 items-center">
-                  {i > 0 ? <span aria-hidden className="mx-1 h-px w-4 shrink-0 bg-zinc-200 sm:w-8" /> : null}
+                  {i > 0 ? <span aria-hidden className="mx-1 h-px w-4 shrink-0 bg-line sm:w-8" /> : null}
                   <button
                     onClick={() => reachable && goto(i)}
                     disabled={!reachable}
                     aria-current={step === i ? "step" : undefined}
                     className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm transition ${
                       step === i
-                        ? "bg-zinc-900 text-white"
+                        ? "bg-invert text-invert-fg"
                         : reachable
-                          ? "text-zinc-600 hover:bg-zinc-100"
-                          : "text-zinc-300"
+                          ? "text-ink-soft hover:bg-sunken"
+                          : "text-ink-mute"
                     }`}
                   >
                     <span
@@ -633,11 +643,11 @@ export function Viewer() {
                       className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
                         state === "done"
                           ? step === i
-                            ? "bg-white"
-                            : "bg-zinc-900"
+                            ? "bg-surface"
+                            : "bg-invert"
                           : state === "now"
-                            ? "animate-pulse bg-amber-500"
-                            : "bg-zinc-300"
+                            ? "animate-pulse bg-active"
+                            : "bg-ink-faint"
                       }`}
                     />
                     {label}
@@ -647,8 +657,9 @@ export function Viewer() {
             })}
           </ol>
 
-          <span className="hidden min-w-0 shrink truncate text-sm text-zinc-400 sm:block">{url}</span>
-          <Link href="/" className="shrink-0 text-sm text-zinc-500 hover:text-zinc-900">
+          <span className="hidden min-w-0 shrink truncate text-sm text-ink-mute sm:block">{url}</span>
+          <ThemeToggle />
+          <Link href="/" className="shrink-0 text-sm text-ink-soft hover:text-ink">
             Start over
           </Link>
         </div>
@@ -659,7 +670,7 @@ export function Viewer() {
         {/* min-h-0 is what lets this column scroll instead of stretching the page. */}
         <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
           {fromCache ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ok px-3 py-2 text-sm text-ok-fg ring-1 ring-inset ring-ok-line">
               <span>
                 Loaded from cache — no API calls, saved about{" "}
                 {Math.round(fromCache.cents ?? 17)}¢ and two minutes.
@@ -775,17 +786,17 @@ export function Viewer() {
       </main>
 
       {/* ---------------- footer: back, where you are, forward ---------------- */}
-      <footer className="shrink-0 border-t border-zinc-200 bg-white">
+      <footer className="shrink-0 border-t border-line bg-surface">
         <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-4 px-6 py-3">
           <button
             onClick={() => goto(step - 1)}
             disabled={step === 0}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium disabled:opacity-30"
+            className="rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium disabled:opacity-30"
           >
             Back
           </button>
 
-          <p className="min-w-0 truncate text-sm text-zinc-500">
+          <p className="min-w-0 truncate text-sm text-ink-soft">
             {phase === "failed"
               ? "Couldn't read that site."
               : !ready[step] && step === furthest
@@ -799,7 +810,7 @@ export function Viewer() {
             <button
               onClick={primary.onClick}
               disabled={primary.disabled}
-              className="rounded-lg bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+              className="rounded-lg bg-invert px-4 py-1.5 text-sm font-medium text-invert-fg disabled:opacity-40"
             >
               {primary.label}
             </button>

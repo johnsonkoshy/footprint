@@ -50,33 +50,33 @@ export function PostStage({
           <input
             value={content.hook}
             onChange={(e) => onContentChange({ ...content, hook: e.target.value })}
-            className="w-full rounded-lg border border-transparent bg-zinc-50 px-3 py-2 text-base font-medium hover:border-zinc-300 focus:border-zinc-900 focus:bg-white focus:outline-none"
+            className="w-full rounded-lg border border-transparent bg-raised px-3 py-2 text-base font-medium hover:border-line-strong focus:border-ink focus:bg-surface focus:outline-none"
             aria-label="Headline"
           />
           <textarea
             value={content.caption}
             onChange={(e) => onContentChange({ ...content, caption: e.target.value })}
             rows={3}
-            className="w-full resize-none rounded-lg border border-transparent bg-zinc-50 px-3 py-2 text-sm text-zinc-700 hover:border-zinc-300 focus:border-zinc-900 focus:bg-white focus:outline-none"
+            className="w-full resize-none rounded-lg border border-transparent bg-raised px-3 py-2 text-sm text-ink hover:border-line-strong focus:border-ink focus:bg-surface focus:outline-none"
             aria-label="Caption"
           />
           {content.hashtags.length ? (
-            <p className="text-xs text-zinc-400">{content.hashtags.map((h) => `#${h}`).join(" ")}</p>
+            <p className="text-xs text-ink-mute">{content.hashtags.map((h) => `#${h}`).join(" ")}</p>
           ) : null}
 
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+          {error ? <p className="text-sm text-danger-fg">{error}</p> : null}
 
           {publish?.configured ? (
-            <div className="flex items-center gap-3 border-t border-zinc-100 pt-3">
+            <div className="flex items-center gap-3 border-t border-line-soft pt-3">
               <button
                 onClick={onPublish}
                 disabled={publishing}
-                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+                className="rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium disabled:opacity-40"
               >
                 {publishing ? "Posting…" : `Post to ${publish.name}`}
               </button>
               {published ? (
-                <a href={published} target="_blank" rel="noreferrer" className="truncate text-sm text-green-700 underline">
+                <a href={published} target="_blank" rel="noreferrer" className="truncate text-sm text-ok-fg underline">
                   {published}
                 </a>
               ) : null}

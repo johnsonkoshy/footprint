@@ -5,10 +5,10 @@ import type { MarketingPlan, SiteSignals } from "@/types";
 import { Stage, Skeleton, Working, Chip, type StageStatus } from "./Stage";
 
 const MATURITY: Record<string, { label: string; className: string }> = {
-  invisible: { label: "Invisible", className: "bg-zinc-100 text-zinc-600 ring-zinc-200" },
-  emerging: { label: "Emerging", className: "bg-amber-50 text-amber-800 ring-amber-200" },
-  active: { label: "Active", className: "bg-sky-50 text-sky-800 ring-sky-200" },
-  advanced: { label: "Advanced", className: "bg-emerald-50 text-emerald-800 ring-emerald-200" },
+  invisible: { label: "Invisible", className: "bg-sunken text-ink-soft ring-line" },
+  emerging: { label: "Emerging", className: "bg-warn text-warn-fg ring-warn-line" },
+  active: { label: "Active", className: "bg-info text-info-fg ring-info-line" },
+  advanced: { label: "Advanced", className: "bg-ok text-ok-fg ring-ok-line" },
 };
 
 /**
@@ -75,33 +75,33 @@ export function FootprintStage({
           </div>
 
           {open && plan ? (
-            <div className="grid gap-4 border-t border-zinc-100 pt-3 text-sm sm:grid-cols-2">
-              <ul className="space-y-1.5 text-zinc-600">
+            <div className="grid gap-4 border-t border-line-soft pt-3 text-sm sm:grid-cols-2">
+              <ul className="space-y-1.5 text-ink-soft">
                 {plan.audit.strengths.map((x) => (
                   <li key={x} className="flex gap-2">
-                    <span aria-hidden className="text-emerald-600">+</span>
+                    <span aria-hidden className="text-ok-fg">+</span>
                     <span>{x}</span>
                   </li>
                 ))}
               </ul>
-              <ul className="space-y-1.5 text-zinc-600">
+              <ul className="space-y-1.5 text-ink-soft">
                 {plan.audit.gaps.map((x) => (
                   <li key={x} className="flex gap-2">
-                    <span aria-hidden className="text-amber-600">–</span>
+                    <span aria-hidden className="text-warn-fg">–</span>
                     <span>{x}</span>
                   </li>
                 ))}
               </ul>
-              <p className="text-zinc-600 sm:col-span-2">{plan.audit.summary}</p>
-              <dl className="space-y-1 text-xs text-zinc-500 sm:col-span-2">
+              <p className="text-ink-soft sm:col-span-2">{plan.audit.summary}</p>
+              <dl className="space-y-1 text-xs text-ink-soft sm:col-span-2">
                 {signals.martech.length ? (
                   <div>
-                    <dt className="inline font-medium text-zinc-700">Marketing tech: </dt>
+                    <dt className="inline font-medium text-ink">Marketing tech: </dt>
                     <dd className="inline">{signals.martech.map((m) => `${m.name} (${m.category})`).join(", ")}</dd>
                   </div>
                 ) : null}
                 <div>
-                  <dt className="inline font-medium text-zinc-700">Sharing and capture: </dt>
+                  <dt className="inline font-medium text-ink">Sharing and capture: </dt>
                   <dd className="inline">
                     {[
                       signals.hasOgImage ? "Open Graph image" : "no Open Graph image",
@@ -111,7 +111,7 @@ export function FootprintStage({
                   </dd>
                 </div>
                 {signals.softNotFound ? (
-                  <p className="text-amber-700">This site answers 200 for any URL, so unlinked surfaces couldn&apos;t be probed.</p>
+                  <p className="text-warn-fg">This site answers 200 for any URL, so unlinked surfaces couldn&apos;t be probed.</p>
                 ) : null}
               </dl>
             </div>

@@ -1,28 +1,128 @@
 @import "tailwindcss";
 
 /*
- * CLAUDE.md puts dark mode explicitly out of scope, so the scaffold's
- * prefers-color-scheme block is gone. The app is light, always - which also
- * keeps the UI chrome from competing with the brand colours on screen.
+ * The chrome is deliberately greyscale so the extracted brand is the only
+ * colour on screen. That makes theming a matter of mapping about a dozen roles
+ * rather than recolouring components: every surface, line and text weight below
+ * has one light value and one dark one, and nothing else in the app names a
+ * grey directly.
+ *
+ * Brand colours are never themed. Swatches, the rendered post and the logo chip
+ * come from brand.json via inline styles and must look identical in both modes,
+ * because they are the product.
  */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  --page: #ffffff;
+  --surface: #ffffff;
+  --raised: #fafafa;
+  --sunken: #f4f4f5;
+
+  --line-soft: #f4f4f5;
+  --line: #e4e4e7;
+  --line-strong: #d4d4d8;
+
+  --ink: #18181b;
+  --ink-soft: #52525b;
+  --ink-mute: #6b6b74;
+  --ink-faint: #a1a1aa;
+
+  /* The high-contrast pairing used for primary buttons and the north star card. */
+  --invert-bg: #18181b;
+  --invert-fg: #fafafa;
+
+  --warn-bg: #fffbeb;
+  --warn-fg: #92400e;
+  --warn-line: #fde68a;
+  --ok-bg: #ecfdf5;
+  --ok-fg: #065f46;
+  --ok-line: #a7f3d0;
+  --danger-bg: #fef2f2;
+  --danger-fg: #b91c1c;
+  --danger-line: #fecaca;
+  --info-bg: #f0f9ff;
+  --info-fg: #075985;
+  --info-line: #bae6fd;
+  /* The one non-grey in the chrome: marks the stage currently running. */
+  --active: #f59e0b;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --page: #09090b;
+  --surface: #18181b;
+  --raised: #212124;
+  --sunken: #27272a;
+
+  --line-soft: #232326;
+  --line: #2f2f34;
+  --line-strong: #46464d;
+
+  --ink: #fafafa;
+  --ink-soft: #b4b4bb;
+  --ink-mute: #93939c;
+  --ink-faint: #5f5f68;
+
+  --invert-bg: #fafafa;
+  --invert-fg: #18181b;
+
+  /* Tinted near-black rather than the light ramp: a light banner on a dark page
+     glows and pulls the eye off the brand artwork it sits beside. */
+  --warn-bg: #2a1f05;
+  --warn-fg: #fcd34d;
+  --warn-line: #57430f;
+  --ok-bg: #052e22;
+  --ok-fg: #6ee7b7;
+  --ok-line: #10553f;
+  --danger-bg: #2c1113;
+  --danger-fg: #fca5a5;
+  --danger-line: #5d2124;
+  --info-bg: #0c2c47;
+  --info-fg: #7dd3fc;
+  --info-line: #17456b;
+  --active: #fbbf24;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+
+  --color-line-soft: var(--line-soft);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-mute: var(--ink-mute);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-invert: var(--invert-bg);
+  --color-invert-fg: var(--invert-fg);
+
+  --color-warn: var(--warn-bg);
+  --color-warn-fg: var(--warn-fg);
+  --color-warn-line: var(--warn-line);
+  --color-ok: var(--ok-bg);
+  --color-ok-fg: var(--ok-fg);
+  --color-ok-line: var(--ok-line);
+  --color-danger: var(--danger-bg);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-line: var(--danger-line);
+  --color-info: var(--info-bg);
+  --color-info-fg: var(--info-fg);
+  --color-info-line: var(--info-line);
+  --color-active: var(--active);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-html {
-  color-scheme: light;
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--page);
+  color: var(--ink);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }

@@ -101,14 +101,14 @@ export function PlanStage({
             <Skeleton className="h-14" />
             <Skeleton className="h-14" />
           </div>
-          <p className="text-xs text-zinc-400">About a minute. The brand and footprint above are already final.</p>
+          <p className="text-xs text-ink-mute">About a minute. The brand and footprint above are already final.</p>
         </div>
       ) : null}
 
       {status === "error" ? (
         <div className="text-sm">
-          <p className="text-red-700">{error}</p>
-          <button onClick={onRetry} className="mt-2 font-medium text-red-800 underline">
+          <p className="text-danger-fg">{error}</p>
+          <button onClick={onRetry} className="mt-2 font-medium text-danger-fg underline">
             Try again
           </button>
         </div>
@@ -117,7 +117,7 @@ export function PlanStage({
       {status === "done" && plan ? (
         <div className={`flex flex-col gap-4 ${replanning ? "opacity-60" : ""}`}>
           {notes.length ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-200">
+            <p className="rounded-lg bg-warn px-3 py-2 text-xs text-warn-fg ring-1 ring-inset ring-warn-line">
               {notes.join("; ")}
             </p>
           ) : null}
@@ -129,7 +129,7 @@ export function PlanStage({
             what they actually chose.
           */}
           <div>
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
+            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">
               Where you&apos;ll post
             </h3>
             <ul className="flex flex-wrap gap-1.5">
@@ -145,13 +145,13 @@ export function PlanStage({
                       title={c.rationale}
                       className={`rounded-full border px-3 py-1 text-sm transition ${
                         on
-                          ? "border-zinc-900 bg-zinc-900 text-white"
-                          : "border-zinc-200 text-zinc-500 hover:border-zinc-400"
+                          ? "border-ink bg-invert text-invert-fg"
+                          : "border-line text-ink-soft hover:border-line-strong"
                       }`}
                     >
                       {c.name}
                       {aside ? (
-                        <span className={on ? "text-zinc-400" : "text-zinc-300"}> · {aside}</span>
+                        <span className={on ? "text-invert-fg/70" : "text-ink-mute"}> · {aside}</span>
                       ) : null}
                     </button>
                   </li>
@@ -159,17 +159,17 @@ export function PlanStage({
               })}
             </ul>
             {selectedChannels.length ? (
-              <p className="mt-2 text-sm text-zinc-500">
+              <p className="mt-2 text-sm text-ink-soft">
                 {selectedChannels[0].name} first, {selectedChannels[0].cadence.toLowerCase()}
                 {selectedChannels.length > 1 ? ` · then ${selectedChannels.slice(1).map((c) => c.name).join(", ")}` : ""}
               </p>
             ) : (
-              <p className="mt-2 text-sm text-amber-700">Pick at least one channel.</p>
+              <p className="mt-2 text-sm text-warn-fg">Pick at least one channel.</p>
             )}
           </div>
 
           {/* ---- the post decision ---- */}
-          <h3 className="-mb-1 text-xs font-medium uppercase tracking-wider text-zinc-400">
+          <h3 className="-mb-1 text-xs font-medium uppercase tracking-wider text-ink-mute">
             What you&apos;ll make
           </h3>
           <ul className="flex flex-col gap-2">
@@ -179,7 +179,7 @@ export function PlanStage({
                 <li key={ct.name}>
                   <div
                     className={`rounded-lg border transition ${
-                      selected ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 hover:border-zinc-300"
+                      selected ? "border-ink bg-raised" : "border-line hover:border-line-strong"
                     }`}
                   >
                     <button
@@ -205,8 +205,8 @@ export function PlanStage({
                           }}
                           className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] leading-none ${
                             pickedFormats.includes(ct.name)
-                              ? "border-zinc-900 bg-zinc-900 text-white"
-                              : "border-zinc-300"
+                              ? "border-ink bg-invert text-invert-fg"
+                              : "border-line-strong"
                           }`}
                         >
                           {pickedFormats.includes(ct.name) ? "✓" : ""}
@@ -214,7 +214,7 @@ export function PlanStage({
                         {ct.name}
                       </span>
                       {selected ? null : (
-                        <span className="mt-0.5 block text-sm text-zinc-500">{ct.topic}</span>
+                        <span className="mt-0.5 block text-sm text-ink-soft">{ct.topic}</span>
                       )}
                     </button>
                     {selected ? (
@@ -223,10 +223,10 @@ export function PlanStage({
                           value={topic}
                           onChange={(e) => onTopicChange(e.target.value)}
                           rows={2}
-                          className="w-full resize-none rounded-md border border-zinc-300 bg-white p-2 text-sm outline-none focus:border-zinc-900"
+                          className="w-full resize-none rounded-md border border-line-strong bg-surface p-2 text-sm outline-none focus:border-ink"
                           aria-label="Post brief"
                         />
-                        <p className="mt-1.5 text-xs text-zinc-400">{ct.why}</p>
+                        <p className="mt-1.5 text-xs text-ink-mute">{ct.why}</p>
                       </div>
                     ) : null}
                   </div>
@@ -249,12 +249,12 @@ export function PlanStage({
                   onChange={(e) => onGoalChange(e.target.value)}
                   placeholder="Use Instagram instead. Or: we only have two hours a week"
                   disabled={replanning}
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900 disabled:bg-zinc-50"
+                  className="min-w-0 flex-1 rounded-lg border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink disabled:bg-raised"
                 />
                 <button
                   type="submit"
                   disabled={replanning}
-                  className="shrink-0 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium disabled:opacity-40"
+                  className="shrink-0 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium disabled:opacity-40"
                 >
                   {replanning ? "Redoing…" : "Redo the plan"}
                 </button>
@@ -265,8 +265,8 @@ export function PlanStage({
                 sixty seconds the rewrite takes.
               */}
               {replanning ? (
-                <p className="text-sm text-zinc-500">
-                  <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 align-middle" aria-hidden />
+                <p className="text-sm text-ink-soft">
+                  <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ink-mute align-middle" aria-hidden />
                   Rewriting the whole plan around that. About a minute — the plan below is the old one.
                 </p>
               ) : null}
@@ -274,7 +274,7 @@ export function PlanStage({
           ) : null}
 
           {dirty ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-900 px-3 py-2.5 text-sm text-white">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-invert px-3 py-2.5 text-sm text-invert-fg">
               <span>
                 {pickedChannels.length || 0} channel{pickedChannels.length === 1 ? "" : "s"},{" "}
                 {pickedFormats.length} format{pickedFormats.length === 1 ? "" : "s"} — the plan below is still the old one
@@ -282,7 +282,7 @@ export function PlanStage({
               <button
                 onClick={onRebuild}
                 disabled={rebuilding || !pickedChannels.length || !pickedFormats.length}
-                className="rounded-lg bg-white px-3 py-1.5 font-medium text-zinc-900 disabled:opacity-40"
+                className="rounded-lg bg-surface px-3 py-1.5 font-medium text-ink disabled:opacity-40"
               >
                 {rebuilding ? "Rewriting…" : "Rebuild the plan"}
               </button>
@@ -290,7 +290,7 @@ export function PlanStage({
           ) : null}
 
           <div className="flex items-center justify-between gap-3">
-            <button onClick={() => setWhy((v) => !v)} className="text-sm text-zinc-500 hover:text-zinc-900">
+            <button onClick={() => setWhy((v) => !v)} className="text-sm text-ink-soft hover:text-ink">
               <span aria-hidden className="mr-1 inline-block transition-transform" style={{ transform: why ? "rotate(90deg)" : "none" }}>
                 ›
               </span>
@@ -299,7 +299,7 @@ export function PlanStage({
             <button
               onClick={onWrite}
               disabled={writing || !topic.trim()}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+              className="rounded-lg bg-invert px-4 py-2 text-sm font-medium text-invert-fg disabled:opacity-40"
             >
               {writing ? "Writing…" : `Write this post for ${channel || "them"}`}
             </button>
@@ -314,14 +314,14 @@ export function PlanStage({
 
 function Why({ plan }: { plan: MarketingPlan }) {
   return (
-    <div className="flex flex-col gap-5 border-t border-zinc-100 pt-4 text-sm">
+    <div className="flex flex-col gap-5 border-t border-line-soft pt-4 text-sm">
       <div>
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">Channels, in order</h3>
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">Channels, in order</h3>
         <ul className="space-y-2">
           {plan.channels.map((c) => (
-            <li key={c.name} className="text-zinc-600">
-              <span className="font-medium text-zinc-900">{c.name}</span>
-              <span className="text-zinc-400"> · {MOVE_LABEL[c.move] ?? c.move} · {c.cadence}</span>
+            <li key={c.name} className="text-ink-soft">
+              <span className="font-medium text-ink">{c.name}</span>
+              <span className="text-ink-mute"> · {MOVE_LABEL[c.move] ?? c.move} · {c.cadence}</span>
               <p className="mt-0.5">{c.rationale}</p>
             </li>
           ))}
@@ -330,15 +330,15 @@ function Why({ plan }: { plan: MarketingPlan }) {
 
       {plan.experiments.length ? (
         <div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">Experiments</h3>
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">Experiments</h3>
           <ul className="space-y-3">
             {plan.experiments.map((e) => (
-              <li key={e.name} className="rounded-lg bg-zinc-50 p-3">
+              <li key={e.name} className="rounded-lg bg-raised p-3">
                 <p className="font-medium">{e.name}</p>
-                <p className="mt-1 text-zinc-600">{e.hypothesis}</p>
-                <p className="mt-1.5 text-xs text-zinc-500">{e.method}</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  <span className="font-medium text-zinc-600">Read out: </span>{e.readout}
+                <p className="mt-1 text-ink-soft">{e.hypothesis}</p>
+                <p className="mt-1.5 text-xs text-ink-soft">{e.method}</p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  <span className="font-medium text-ink-soft">Read out: </span>{e.readout}
                 </p>
               </li>
             ))}
@@ -348,14 +348,14 @@ function Why({ plan }: { plan: MarketingPlan }) {
 
       {plan.timeline.length ? (
         <div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">First quarter</h3>
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-mute">First quarter</h3>
           <ol className="space-y-3">
             {plan.timeline.map((t) => (
-              <li key={t.window} className="border-l-2 border-zinc-200 pl-3">
+              <li key={t.window} className="border-l-2 border-line pl-3">
                 <p className="font-medium">
-                  {t.window} <span className="font-normal text-zinc-500">— {t.focus}</span>
+                  {t.window} <span className="font-normal text-ink-soft">— {t.focus}</span>
                 </p>
-                <ul className="mt-1 space-y-0.5 text-zinc-600">
+                <ul className="mt-1 space-y-0.5 text-ink-soft">
                   {t.deliverables.map((d) => (
                     <li key={d}>· {d}</li>
                   ))}

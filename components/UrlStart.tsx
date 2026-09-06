@@ -36,22 +36,22 @@ export function UrlStart() {
           placeholder="yourcompany.com"
           aria-label="Your company URL"
           autoFocus
-          className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-4 py-3 text-base outline-none focus:border-zinc-900"
+          className="min-w-0 flex-1 rounded-lg border border-line-strong px-4 py-3 text-base outline-none focus:border-ink"
         />
         <button
           type="submit"
           disabled={!url.trim()}
-          className="shrink-0 rounded-lg bg-zinc-900 px-6 py-3 text-base font-medium text-white disabled:opacity-40"
+          className="shrink-0 rounded-lg bg-invert px-6 py-3 text-base font-medium text-invert-fg disabled:opacity-40"
         >
           Start
         </button>
       </form>
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-ink-soft">
         Or try{" "}
         {EXAMPLES.map((u, i) => (
           <span key={u}>
             {i > 0 ? ", " : ""}
-            <button onClick={() => go(u)} className="underline underline-offset-2 hover:text-zinc-900">
+            <button onClick={() => go(u)} className="underline underline-offset-2 hover:text-ink">
               {u}
             </button>
           </span>

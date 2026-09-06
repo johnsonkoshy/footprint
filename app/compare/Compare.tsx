@@ -127,51 +127,51 @@ export function Compare() {
   const busy = (s: Side) => ["extracting", "writing", "drawing"].includes(s.status);
 
   return (
-    <main className="flex flex-1 flex-col bg-white">
+    <main className="flex flex-1 flex-col bg-surface">
       {chrome ? (
-        <div className="border-b border-zinc-200">
+        <div className="border-b border-line">
           <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-3 px-8 py-4">
             <input
               value={left.url}
               onChange={(e) => setLeft((s) => ({ ...s, url: e.target.value }))}
-              className="w-44 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              className="w-44 rounded-lg border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink"
               placeholder="first url"
             />
-            <span className="text-sm text-zinc-400">vs</span>
+            <span className="text-sm text-ink-mute">vs</span>
             <input
               value={right.url}
               onChange={(e) => setRight((s) => ({ ...s, url: e.target.value }))}
-              className="w-44 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              className="w-44 rounded-lg border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink"
               placeholder="second url"
             />
             <input
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              className="min-w-[220px] flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              className="min-w-[220px] flex-1 rounded-lg border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink"
               placeholder="one topic, both brands"
             />
             <button
               onClick={run}
               disabled={running}
-              className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
+              className="rounded-lg bg-invert px-5 py-2 text-sm font-medium text-invert-fg disabled:opacity-40"
             >
               {running ? "Running…" : "Generate both"}
             </button>
             <button
               onClick={loadCached}
               disabled={running}
-              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm disabled:opacity-40"
+              className="rounded-lg border border-line-strong px-4 py-2 text-sm disabled:opacity-40"
               title="Hand-written kits, renders instantly - for demoing without the wait"
             >
               Instant pair
             </button>
-            <div className="flex rounded-lg bg-zinc-100 p-0.5">
+            <div className="flex rounded-lg bg-sunken p-0.5">
               {(["statement", "split"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTemplate(t)}
                   className={`rounded-[6px] px-3 py-1.5 text-sm capitalize ${
-                    template === t ? "bg-white font-medium shadow-sm" : "text-zinc-500"
+                    template === t ? "bg-surface font-medium shadow-sm" : "text-ink-soft"
                   }`}
                 >
                   {t}
@@ -180,7 +180,7 @@ export function Compare() {
             </div>
             <button
               onClick={() => setChrome(false)}
-              className="ml-auto text-sm text-zinc-400 hover:text-zinc-900"
+              className="ml-auto text-sm text-ink-mute hover:text-ink"
               title="Hide the controls for projecting"
             >
               Present ↗
@@ -190,7 +190,7 @@ export function Compare() {
       ) : (
         <button
           onClick={() => setChrome(true)}
-          className="absolute right-4 top-3 z-10 text-xs text-zinc-300 hover:text-zinc-600"
+          className="absolute right-4 top-3 z-10 text-xs text-ink-mute hover:text-ink"
         >
           controls
         </button>
@@ -205,27 +205,27 @@ export function Compare() {
                 <img
                   src={side.img}
                   alt={`${side.url} post`}
-                  className="w-full rounded-xl shadow-2xl ring-1 ring-black/5"
+                  className="w-full rounded-xl shadow-2xl ring-1 ring-line/5"
                 />
               ) : (
-                <div className="flex aspect-[4/5] w-full flex-col items-center justify-center gap-3 rounded-xl bg-zinc-50 ring-1 ring-inset ring-zinc-200">
+                <div className="flex aspect-[4/5] w-full flex-col items-center justify-center gap-3 rounded-xl bg-raised ring-1 ring-inset ring-line">
                   {busy(side) ? (
                     <>
-                      <span className="text-sm font-medium text-zinc-700">
+                      <span className="text-sm font-medium text-ink">
                         {side.status === "extracting"
                           ? stageFor(side.elapsed)
                           : side.status === "writing"
                             ? "Writing in their voice"
                             : "Rendering"}
                       </span>
-                      <span className="font-mono text-xs text-zinc-400">
+                      <span className="font-mono text-xs text-ink-mute">
                         {side.elapsed.toFixed(0)}s
                       </span>
                     </>
                   ) : side.status === "failed" ? (
-                    <p className="max-w-xs px-6 text-center text-sm text-red-700">{side.error}</p>
+                    <p className="max-w-xs px-6 text-center text-sm text-danger-fg">{side.error}</p>
                   ) : (
-                    <span className="text-sm text-zinc-400">{side.url || "no url"}</span>
+                    <span className="text-sm text-ink-mute">{side.url || "no url"}</span>
                   )}
                 </div>
               )}

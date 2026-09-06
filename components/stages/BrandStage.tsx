@@ -56,7 +56,7 @@ export function BrandStage({
       {status === "done" && kit ? (
         <div className="flex flex-col gap-4">
           {notes.length ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-200">
+            <p className="rounded-lg bg-warn px-3 py-2 text-xs text-warn-fg ring-1 ring-inset ring-warn-line">
               {notes.join(". ")}
             </p>
           ) : null}
@@ -65,7 +65,7 @@ export function BrandStage({
       ) : null}
 
       {status === "error" ? (
-        <p className="text-sm text-red-700">{notes.join(" ") || "Couldn't read that site."}</p>
+        <p className="text-sm text-danger-fg">{notes.join(" ") || "Couldn't read that site."}</p>
       ) : null}
     </Stage>
   );

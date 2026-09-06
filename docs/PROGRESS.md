@@ -180,6 +180,61 @@ Full 10-URL Step 2 gate on Opus 5: **10/10 passed, $0.5562 total.**
 
 ---
 
+## Dark mode
+
+CLAUDE.md lists dark mode as explicitly out of scope. Built on request anyway;
+that line in CLAUDE.md is now stale.
+
+It was a token swap, not a recolour. The chrome was already deliberately
+greyscale so the extracted brand is the only colour on screen, which meant the
+whole app named about a dozen grey roles and nothing else. Those roles are now
+CSS variables with one light value and one dark value - `surface`, `raised`,
+`sunken`, `line`, `ink`, `ink-soft`, `ink-mute`, and so on - registered in
+Tailwind's `@theme` so components say `bg-surface` and `text-ink` and never a
+grey directly. Semantic banners (warn, ok, danger, info) got the same
+treatment, with tinted near-blacks in dark rather than the light ramp, because
+a pale banner on a dark page glows and pulls the eye off the brand artwork.
+
+**Brand colours are never themed.** Swatches, the logo chip, the rendered post
+and the brand canvas come from `brand.json` via inline styles and look
+identical in both modes. They are the product.
+
+Switching is class-based on `<html>` with a three-way toggle (auto, light,
+dark) that persists to localStorage. An inline script in `layout.tsx` applies
+the class before first paint so a dark-mode user never sees a white flash. That
+script is what makes `suppressHydrationWarning` on `<html>` genuinely
+necessary: the server markup and client DOM legitimately differ there, and the
+attribute suppresses one level only, so real mismatches inside `<body>` still
+surface.
+
+Contrast was measured, not eyeballed: a script walked every text node and
+computed its WCAG ratio against its effective background. The first dark pass
+had `ink-mute` at 3.67:1 on evidence chips and the URL - under AA for small
+text - so the dark ink ramp was lightened until nothing on screen fell below
+4.5.
+
+### The bug it exposed
+
+Switching to dark to test the Market card found it in its pending state on a
+brand that had a full audience cached. Not a theming bug: the sessionStorage
+restore had never restored `audience`, `competitors` or `siteText` - a patch
+from the wizard rewrite had silently missed its target string - and because
+the restore claimed the run, the Convex hydration that would have supplied them
+never got asked. Worse, the save effect then wrote `null` over the good values,
+poisoning the session. Same read-bug-becomes-write-bug shape as the channel
+picks earlier.
+
+Two fixes. The restore now restores all three. And it no longer claims the
+run: the Convex effect prefers the cache, which is at least as complete and
+gets topped up by `fillGaps`, and only skips extraction - the expensive step -
+when a session already produced a kit. A poisoned session now repairs itself on
+the next load.
+
+Every replacement in this pass was asserted against the file afterwards. Three
+silent no-op patches in one session is a pattern, not bad luck.
+
+---
+
 ## Convex, as a cache
 
 Deployment: `wandering-tiger-755` (project `footprint`). The CLI needed its own
